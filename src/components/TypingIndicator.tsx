@@ -1,0 +1,16 @@
+"use client";
+
+export function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-cordy-ink bg-cordy-red text-sm font-bold text-white">
+        🤖
+      </div>
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm border-2 border-cordy-ink bg-white px-4 py-3 shadow-[3px_3px_0_0_var(--color-cordy-ink)]">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-cordy-ink [animation-delay:0ms]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-cordy-ink [animation-delay:150ms]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-cordy-ink [animation-delay:300ms]" />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-heading: var(--font-baloo), var(--font-nunito), ui-sans-serif, sans-serif;
+
+  /* CORDY brand palette */
+  --color-cordy-cream: #fdf6e8;
+  --color-cordy-red: #ef4444;
+  --color-cordy-teal: #2dd4a7;
+  --color-cordy-ink: #16213e;
+  --color-cordy-blue-tag: #bce8f8;
+}
+
+body {
+  background-color: var(--color-cordy-cream);
+  font-family: var(--font-sans);
+  color: var(--color-cordy-ink);
+}
