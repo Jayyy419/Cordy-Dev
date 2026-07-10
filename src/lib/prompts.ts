@@ -108,7 +108,7 @@ export function extractProfile(message: string): ProfileData | null {
       // we store it temporarily here so the route can pick it up
       opportunities: [],
       _opportunityQueries: raw.opportunityQueries,
-    } as ProfileData & { _opportunityQueries: string[] };
+    };
   } catch {
     return null;
   }

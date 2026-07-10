@@ -81,9 +81,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   }
 
   // Profile detected — fetch real opportunities or fall back to Claude-generated ones
-  const queries = (profileData as typeof profileData & { _opportunityQueries?: string[] })
-    ._opportunityQueries ?? [];
-  delete (profileData as Record<string, unknown>)._opportunityQueries;
+  const queries = profileData._opportunityQueries ?? [];
+  profileData._opportunityQueries = undefined;
 
   profileData.opportunities = await fetchOpportunities(
     queries,
