@@ -3,9 +3,12 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { buildRetrievalBlock, matchOpportunities } from "~/lib/opportunities";
 import {
-  extractProfile,
+  buildProfileFromReply,
+  CONFIDENCE_STOP,
   inferFiltersFromTranscript,
-  stripProfileBlock,
+  MAX_QUESTIONS,
+  MIN_QUESTIONS,
+  parseReply,
   SYSTEM_PROMPT,
 } from "~/lib/prompts";
 import type {
@@ -23,18 +26,28 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     body = (await request.json()) as ChatRequest;
   } catch {
     return NextResponse.json(
-      { message: "Invalid request body" },
+      { message: "Invalid request body", suggestions: [], confidence: 0, done: false },
       { status: 400 },
     );
   }
 
-  const { messages } = body;
+  const { messages, questionsAsked } = body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
-      { message: "messages must be a non-empty array" },
+      { message: "messages must be a non-empty array", suggestions: [], confidence: 0, done: false },
       { status: 400 },
     );
   }
+
+  // Pacing is decided server-side within [MIN_QUESTIONS, MAX_QUESTIONS]; the
+  // model's own CONFIDENCE only gets to end things early inside that range.
+  const forcedContinue = questionsAsked < MIN_QUESTIONS;
+  const forcedFinal = questionsAsked >= MAX_QUESTIONS;
+  const pacingInstruction = forcedFinal
+    ? `PACING: This is the FINAL turn — the question limit has been reached. Your REPLY must be a warm wrap-up with NO new question, DONE must be true, regardless of confidence.`
+    : forcedContinue
+      ? `PACING: You must continue — ask one more discriminating question. DONE must be false, even if you are already confident.`
+      : `PACING: You have asked ${questionsAsked} questions so far. You may wrap up now (DONE: true) ONLY if your confidence is roughly ${CONFIDENCE_STOP}+ ; otherwise ask one more discriminating question (DONE: false).`;
 
   // Ground this turn's question in the real catalog: infer a rough filter
   // set from everything said so far and hand the model the current
@@ -48,7 +61,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     ...messages,
     {
       role: "user" as const,
-      content: `[SYSTEM CONTEXT — not visible to the user]\n${retrievalBlock}`,
+      content: `[SYSTEM CONTEXT — not visible to the user]\n${retrievalBlock}\n\n${pacingInstruction}`,
     },
   ];
 
@@ -69,29 +82,35 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   } catch (err) {
     console.error("[chat/route] Claude API error:", err);
     return NextResponse.json(
-      { message: "Something went wrong. Please try again." },
+      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false },
       { status: 502 },
     );
   }
 
-  const profileData = extractProfile(rawMessage);
+  const parsed = parseReply(rawMessage);
+  const done = forcedFinal ? true : forcedContinue ? false : parsed.done;
 
-  if (!profileData) {
-    return NextResponse.json({ message: rawMessage });
+  if (!done) {
+    return NextResponse.json({
+      message: parsed.reply,
+      suggestions: parsed.suggestions,
+      confidence: parsed.confidence ?? 0,
+      done: false,
+    });
   }
 
-  // Profile detected — fetch real opportunities or fall back to Claude-generated ones
+  // Wrap-up turn — build the full profile and fetch matching opportunities
+  const profileData = buildProfileFromReply(parsed);
   const queries = profileData._opportunityQueries ?? [];
   profileData._opportunityQueries = undefined;
 
-  profileData.opportunities = await fetchOpportunities(
-    queries,
-    profileData.tags,
-    profileData.filters,
-  );
+  profileData.opportunities = await fetchOpportunities(queries, profileData.tags, profileData.filters);
 
   return NextResponse.json({
-    message: stripProfileBlock(rawMessage),
+    message: parsed.reply,
+    suggestions: [],
+    confidence: parsed.confidence ?? 0,
+    done: true,
     profile: profileData,
   });
 }

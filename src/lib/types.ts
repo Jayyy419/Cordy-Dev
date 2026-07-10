@@ -46,11 +46,25 @@ export interface ProfileData {
 
 export interface ChatRequest {
   messages: Omit<Message, "id">[];
+  /** How many questions CORDY has already asked — drives server-side pacing */
+  questionsAsked: number;
 }
 
 export interface ChatResponse {
   message: string;
+  suggestions: string[];
+  confidence: number;
+  done: boolean;
   profile?: ProfileData;
+}
+
+export interface OpenerRequest {
+  categories: string[];
+}
+
+export interface OpenerResponse {
+  message: string;
+  suggestions: string[];
 }
 
 // ── UI state ──────────────────────────────────────────────────────────────────
