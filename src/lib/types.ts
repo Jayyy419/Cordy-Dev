@@ -10,7 +10,22 @@ export interface Message {
 
 export type InterestTag = string;
 
-export interface Opportunity {
+export type OpportunityFormat = "in-person" | "online" | "hybrid";
+export type GroupSize = "solo" | "team" | "either";
+export type SkillLevel = "beginner" | "intermediate" | "advanced" | "any";
+
+/** The real filter dimensions Cordy's catalog is keyed on — see src/lib/opportunities.ts */
+export interface OpportunityFilters {
+  category?: string;
+  subTags?: string[];
+  format?: OpportunityFormat;
+  groupSize?: GroupSize;
+  skillLevel?: SkillLevel;
+  ageMin?: number;
+  ageMax?: number;
+}
+
+export interface Opportunity extends OpportunityFilters {
   id: string;
   title: string;
   description: string;
@@ -22,6 +37,7 @@ export interface ProfileData {
   tags: InterestTag[];
   summary: string;
   opportunities: Opportunity[];
+  filters?: OpportunityFilters;
   /** Populated by extractProfile; consumed and removed by the API route */
   _opportunityQueries?: string[];
 }

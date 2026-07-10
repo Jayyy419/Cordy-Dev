@@ -6,16 +6,11 @@ import { ChatBubble } from "~/components/ChatBubble";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
 import { MCQ_CATEGORIES_STORAGE_KEY } from "~/lib/mcq";
+import { CATEGORIES } from "~/lib/opportunities";
 import { OPENING_MESSAGE } from "~/lib/prompts";
 import type { ChatResponse, ChatStatus, Message } from "~/lib/types";
 
-const ALL_QUICK_REPLIES = [
-  "Sports & outdoor stuff",
-  "Art or music",
-  "Tech & coding",
-  "Hanging out with people",
-  "Reading or learning new things",
-];
+const ALL_QUICK_REPLIES: string[] = [...CATEGORIES];
 
 function createMessage(role: Message["role"], content: string): Message {
   return { id: crypto.randomUUID(), role, content };

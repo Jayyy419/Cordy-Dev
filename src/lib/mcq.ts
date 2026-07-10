@@ -1,7 +1,11 @@
+import { CATEGORIES } from "./opportunities";
+
 // ── MCQ bucketing flow ──────────────────────────────────────────────────────
 // A short multiple-choice warm-up shown before the free-form chat. It lets
-// CORDY bucket a user's broad interests fast (tap-only, no typing) so the
-// chat stage can open with a more grounded first question.
+// CORDY bucket a user's broad interests fast (tap-only, no typing) using the
+// SAME category taxonomy the opportunities catalog is keyed on (see
+// src/lib/opportunities.ts CATEGORIES) — not invented buckets — so the pick
+// here narrows the same real field the chat stage later refines.
 
 export interface McqOption {
   label: string;
@@ -15,6 +19,14 @@ export interface McqQuestion {
   options: McqOption[];
 }
 
+const CATEGORY_EMOJI: Record<string, string> = {
+  "Sports & Outdoor": "⚽",
+  "Arts & Music": "🎨",
+  "Tech & Coding": "💻",
+  "Community & Volunteering": "🤝",
+  "Academic & STEM": "🔬",
+};
+
 export type McqAnswers = Record<string, string | string[]>;
 
 export const Q_DESCRIBE: McqQuestion = {
@@ -27,36 +39,29 @@ export const Q_DESCRIBE: McqQuestion = {
   ],
 };
 
-export const Q_HELPER: McqQuestion = {
-  id: "helper",
-  question: "No worries — what sounds like something you'd enjoy trying?",
-  multi: true,
-  options: [
-    { label: "🏃 Something active", tag: "Sports & outdoor stuff" },
-    { label: "🎨 Something creative", tag: "Art or music" },
-    { label: "💻 Something with computers", tag: "Tech & coding" },
-    { label: "👥 Something social", tag: "Hanging out with people" },
-  ],
-};
-
+// "Unsure" users get gentler copy on the same real-category question rather
+// than a separate invented bucket set that would just be asking the same
+// thing twice with different words.
 export const Q_CATEGORIES: McqQuestion = {
   id: "categories",
   question: "Pick whichever sounds like you — choose as many as you like",
   multi: true,
-  options: [
-    { label: "⚽ Sports & outdoor stuff", tag: "Sports & outdoor stuff" },
-    { label: "🎨 Art or music", tag: "Art or music" },
-    { label: "💻 Tech & coding", tag: "Tech & coding" },
-    { label: "👥 Hanging out with people", tag: "Hanging out with people" },
-    { label: "📚 Reading or learning new things", tag: "Reading or learning new things" },
-  ],
+  options: CATEGORIES.map((c) => ({
+    label: `${CATEGORY_EMOJI[c] ?? ""} ${c}`.trim(),
+    tag: c,
+  })),
+};
+
+export const Q_CATEGORIES_UNSURE: McqQuestion = {
+  ...Q_CATEGORIES,
+  question: "No worries — what sounds like something you'd enjoy trying?",
 };
 
 export function getMcqFlow(answers: McqAnswers): McqQuestion[] {
-  const flow = [Q_DESCRIBE];
-  if (answers.describe === "unsure") flow.push(Q_HELPER);
-  flow.push(Q_CATEGORIES);
-  return flow;
+  return [
+    Q_DESCRIBE,
+    answers.describe === "unsure" ? Q_CATEGORIES_UNSURE : Q_CATEGORIES,
+  ];
 }
 
 export const MCQ_CATEGORIES_STORAGE_KEY = "cordy_mcq_categories";
