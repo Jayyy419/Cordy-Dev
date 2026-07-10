@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { buildPartialProfile } from "~/lib/backendProfileSim";
 import {
   getMcqFlow,
   MCQ_CATEGORIES_STORAGE_KEY,
@@ -26,6 +27,16 @@ export default function McqPage() {
       localStorage.setItem(MCQ_CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
     }
     router.push("/chat");
+  }
+
+  function skipToResults() {
+    const categories = (answers.categories as string[] | undefined) ?? [];
+    const profile = buildPartialProfile(
+      categories,
+      categories.length === 1 ? { category: categories[0] } : undefined,
+    );
+    localStorage.setItem("cordy_profile", JSON.stringify(profile));
+    router.push("/profile");
   }
 
   function advance(nextAnswers: McqAnswers) {
@@ -79,10 +90,7 @@ export default function McqPage() {
               </span>
             </div>
           </div>
-          <button
-            onClick={() => finish(answers)}
-            className="text-sm font-semibold text-cordy-ink/50"
-          >
+          <button onClick={skipToResults} className="text-sm font-semibold text-cordy-ink/50">
             Skip for now →
           </button>
         </div>

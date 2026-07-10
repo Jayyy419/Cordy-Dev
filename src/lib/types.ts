@@ -48,6 +48,8 @@ export interface ChatRequest {
   messages: Omit<Message, "id">[];
   /** How many questions CORDY has already asked — drives server-side pacing */
   questionsAsked: number;
+  /** Raised above the default MAX_QUESTIONS when the user opts to "keep chatting" after seeing results */
+  maxQuestions?: number;
 }
 
 export interface ChatResponse {

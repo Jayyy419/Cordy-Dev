@@ -31,7 +31,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     );
   }
 
-  const { messages, questionsAsked } = body;
+  const { messages, questionsAsked, maxQuestions } = body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
       { message: "messages must be a non-empty array", suggestions: [], confidence: 0, done: false },
@@ -39,10 +39,13 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     );
   }
 
-  // Pacing is decided server-side within [MIN_QUESTIONS, MAX_QUESTIONS]; the
+  // Pacing is decided server-side within [MIN_QUESTIONS, effectiveMax]; the
   // model's own CONFIDENCE only gets to end things early inside that range.
+  // effectiveMax is normally MAX_QUESTIONS, but the client may raise it when
+  // the user opts to "keep chatting" after already seeing a results screen.
+  const effectiveMax = maxQuestions && maxQuestions > 0 ? maxQuestions : MAX_QUESTIONS;
   const forcedContinue = questionsAsked < MIN_QUESTIONS;
-  const forcedFinal = questionsAsked >= MAX_QUESTIONS;
+  const forcedFinal = questionsAsked >= effectiveMax;
   const pacingInstruction = forcedFinal
     ? `PACING: This is the FINAL turn — the question limit has been reached. Your REPLY must be a warm wrap-up with NO new question, DONE must be true, regardless of confidence.`
     : forcedContinue
