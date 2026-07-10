@@ -32,7 +32,7 @@ export default function HomePage() {
           opportunities picked just for you — no guessing, no scrolling.
         </p>
         <Link
-          href="/chat"
+          href="/mcq"
           className="rounded-2xl border-2 border-cordy-ink bg-cordy-red px-8 py-3 text-center font-bold text-white shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
         >
           Start chatting with CORDY →

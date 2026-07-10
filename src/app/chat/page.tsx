@@ -5,32 +5,53 @@ import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "~/components/ChatBubble";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
+import { MCQ_CATEGORIES_STORAGE_KEY } from "~/lib/mcq";
+import { CATEGORIES } from "~/lib/opportunities";
 import { OPENING_MESSAGE } from "~/lib/prompts";
 import type { ChatResponse, ChatStatus, Message } from "~/lib/types";
 
-const QUICK_REPLY_MAP: Record<string, string[]> = {
-  [OPENING_MESSAGE]: [
-    "Sports & outdoor stuff",
-    "Art or music",
-    "Tech & coding",
-    "Hanging out with people",
-    "Reading or learning new things",
-  ],
-};
+const ALL_QUICK_REPLIES: string[] = [...CATEGORIES];
 
 function createMessage(role: Message["role"], content: string): Message {
   return { id: crypto.randomUUID(), role, content };
 }
 
+function readMcqCategories(): string[] {
+  try {
+    const raw = localStorage.getItem(MCQ_CATEGORIES_STORAGE_KEY);
+    localStorage.removeItem(MCQ_CATEGORIES_STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
+}
+
 export default function ChatPage() {
   const router = useRouter();
+  const [mcqCategories] = useState<string[]>(() =>
+    typeof window === "undefined" ? [] : readMcqCategories(),
+  );
   const [messages, setMessages] = useState<Message[]>([
-    createMessage("assistant", OPENING_MESSAGE),
+    createMessage(
+      "assistant",
+      mcqCategories.length > 0
+        ? `Hey there! I'm CORDY 👋 Nice, ${mcqCategories.join(" and ")} — good picks! To start off, what's something specific about ${mcqCategories[0]?.toLowerCase()} that you're really into right now?`
+        : OPENING_MESSAGE,
+    ),
   ]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<ChatStatus>("chatting");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const quickReplyPool =
+    mcqCategories.length > 0
+      ? ALL_QUICK_REPLIES.filter((r) => !mcqCategories.includes(r))
+      : ALL_QUICK_REPLIES;
+  const QUICK_REPLY_MAP: Record<string, string[]> = {
+    [messages[0]!.content]: quickReplyPool,
+  };
 
   const isLoading = status !== "chatting";
   const lastMessage = messages[messages.length - 1];
