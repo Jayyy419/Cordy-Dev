@@ -279,8 +279,7 @@ export function retrieveCandidates(filters: OpportunityFilters, limit = 5): Oppo
   return CATALOG.slice(0, limit);
 }
 
-export function buildRetrievalBlock(filters: OpportunityFilters): string {
-  const candidates = retrieveCandidates(filters, 5);
+export function buildRetrievalBlockFromCandidates(candidates: Opportunity[]): string {
   const lines = candidates
     .map((o) => {
       const dims = [
@@ -295,4 +294,73 @@ export function buildRetrievalBlock(filters: OpportunityFilters): string {
     })
     .join("\n");
   return `RETRIEVED OPPORTUNITIES (current best matches from Cordy's catalog, given what's known so far):\n${lines}`;
+}
+
+export function buildRetrievalBlock(filters: OpportunityFilters): string {
+  return buildRetrievalBlockFromCandidates(retrieveCandidates(filters, 5));
+}
+
+// ── Deterministic confidence ─────────────────────────────────────────────
+// Confidence is a real, explainable number derived from the match scores
+// themselves — not an LLM self-report — so it can only move the way the
+// underlying data actually supports: it's a blend of (a) how well the top
+// candidate covers the known filters, and (b) how much it's separated from
+// the runner-up. As answers accumulate and narrow the field, both terms
+// mechanically tighten; nothing about it can regress just because a reply
+// "seemed" less certain to a model.
+
+const MAX_POSSIBLE_SCORE = 4 + 3 * 2 + 1.5 + 1.5 + 1.5; // category + subTags(~3) + format + groupSize + skillLevel
+
+export function confidenceFromFilters(filters: OpportunityFilters): number {
+  const scores = CATALOG.map((opp) => scoreOpportunity(opp, filters)).sort((a, b) => b - a);
+  const top = scores[0] ?? 0;
+  if (top <= 0) return 0;
+
+  const runnerUp = scores[1] ?? 0;
+  const coverage = Math.min(1, top / MAX_POSSIBLE_SCORE);
+  const separation = top > 0 ? Math.max(0, (top - runnerUp) / top) : 0;
+
+  return Math.round(Math.min(100, Math.max(0, (0.6 * coverage + 0.4 * separation) * 100)));
+}
+
+// ── Explainable matches ───────────────────────────────────────────────────
+// Human-readable reasons a given opportunity matched the collected filters —
+// the same dimensions scoreOpportunity itself weighs — so a user (or a
+// parent) can see *why* something was recommended, not just that it was.
+
+export function explainMatch(opp: Opportunity, filters: OpportunityFilters): string[] {
+  const reasons: string[] = [];
+
+  if (filters.category && opp.category === filters.category) {
+    reasons.push(`Category: ${opp.category}`);
+  }
+  if (filters.subTags?.length && opp.subTags?.length) {
+    const overlap = opp.subTags.filter((t) => filters.subTags?.includes(t));
+    if (overlap.length) reasons.push(`Matches on: ${overlap.join(", ")}`);
+  }
+  if (filters.format && opp.format && filters.format === opp.format) {
+    reasons.push(`Format: ${opp.format}`);
+  }
+  if (filters.groupSize && opp.groupSize && filters.groupSize === opp.groupSize) {
+    reasons.push(`Group: ${opp.groupSize}`);
+  }
+  if (filters.skillLevel && opp.skillLevel && filters.skillLevel === opp.skillLevel) {
+    reasons.push(`Skill level: ${opp.skillLevel}`);
+  }
+
+  return reasons;
+}
+
+// ── Social proof (placeholder) ───────────────────────────────────────────
+// PLACEHOLDER — a real deployment would pull actual recent-signup counts
+// from Cordy's backend. This derives a stable (not random-per-render),
+// plausible-looking number from the opportunity id purely so the UI concept
+// is demonstrable; swap for a real aggregate query when one exists.
+
+export function estimatedRecentJoins(oppId: string): number {
+  let hash = 0;
+  for (let i = 0; i < oppId.length; i++) {
+    hash = (hash * 31 + oppId.charCodeAt(i)) >>> 0;
+  }
+  return 6 + (hash % 35); // stable pseudo-count in [6, 40]
 }

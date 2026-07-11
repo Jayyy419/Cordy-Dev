@@ -1,7 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
-import { buildRetrievalBlock, matchOpportunities } from "~/lib/opportunities";
+import {
+  buildRetrievalBlockFromCandidates,
+  confidenceFromFilters,
+  matchOpportunities,
+} from "~/lib/opportunities";
 import {
   buildProfileFromReply,
   CONFIDENCE_STOP,
@@ -11,6 +15,7 @@ import {
   parseReply,
   SYSTEM_PROMPT,
 } from "~/lib/prompts";
+import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type {
   ChatRequest,
   ChatResponse,
@@ -39,27 +44,34 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     );
   }
 
-  // Pacing is decided server-side within [MIN_QUESTIONS, effectiveMax]; the
-  // model's own CONFIDENCE only gets to end things early inside that range.
+  // Ground this turn's question in the real catalog: infer a rough filter
+  // set from everything said so far, then have a fast model semantically
+  // re-rank a candidate pool by relevance to the actual conversation (a
+  // stand-in two-stage retrieval pipeline for a real embeddings/vector
+  // search once one exists — see semanticRetrieval.ts) so the next
+  // question targets an actual discriminating field, not generic trivia.
+  const transcriptText = messages.map((m) => m.content).join("\n");
+  const inferredFilters = inferFiltersFromTranscript(transcriptText);
+  const candidates = await semanticRetrieve(anthropic, transcriptText, inferredFilters);
+  const retrievalBlock = buildRetrievalBlockFromCandidates(candidates);
+
+  // Confidence is computed deterministically from real match scores, not
+  // asked of the model — it can only move the way the data actually
+  // supports, so it can't visibly regress turn to turn.
+  const computedConfidence = confidenceFromFilters(inferredFilters);
+
+  // Pacing is decided server-side within [MIN_QUESTIONS, effectiveMax].
   // effectiveMax is normally MAX_QUESTIONS, but the client may raise it when
   // the user opts to "keep chatting" after already seeing a results screen.
   const effectiveMax = maxQuestions && maxQuestions > 0 ? maxQuestions : MAX_QUESTIONS;
   const forcedContinue = questionsAsked < MIN_QUESTIONS;
   const forcedFinal = questionsAsked >= effectiveMax;
   const pacingInstruction = forcedFinal
-    ? `PACING: This is the FINAL turn — the question limit has been reached. Your REPLY must be a warm wrap-up with NO new question, DONE must be true, regardless of confidence.`
+    ? `PACING: This is the FINAL turn — the question limit has been reached. Your REPLY must be a warm wrap-up with NO new question, DONE must be true.`
     : forcedContinue
-      ? `PACING: You must continue — ask one more discriminating question. DONE must be false, even if you are already confident.`
-      : `PACING: You have asked ${questionsAsked} questions so far. You may wrap up now (DONE: true) ONLY if your confidence is roughly ${CONFIDENCE_STOP}+ ; otherwise ask one more discriminating question (DONE: false).`;
+      ? `PACING: You must continue — ask one more discriminating question. DONE must be false.`
+      : `PACING: The computed match confidence is ${computedConfidence}%. You may wrap up now (DONE: true) ONLY if that is roughly ${CONFIDENCE_STOP}+ ; otherwise ask one more discriminating question (DONE: false).`;
 
-  // Ground this turn's question in the real catalog: infer a rough filter
-  // set from everything said so far and hand the model the current
-  // best-matching real candidates (and the dimensions they differ on) as
-  // hidden context, so its next question targets an actual discriminating
-  // field rather than open-ended trivia.
-  const transcriptText = messages.map((m) => m.content).join("\n");
-  const inferredFilters = inferFiltersFromTranscript(transcriptText);
-  const retrievalBlock = buildRetrievalBlock(inferredFilters);
   const messagesWithContext = [
     ...messages,
     {
@@ -97,13 +109,16 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     return NextResponse.json({
       message: parsed.reply,
       suggestions: parsed.suggestions,
-      confidence: parsed.confidence ?? 0,
+      confidence: computedConfidence,
       done: false,
     });
   }
 
-  // Wrap-up turn — build the full profile and fetch matching opportunities
+  // Wrap-up turn — build the full profile and fetch matching opportunities.
+  // Prefer the model's own FILTERS if it gave one (it's seen the whole
+  // conversation), fall back to the transcript-inferred set.
   const profileData = buildProfileFromReply(parsed);
+  profileData.filters = profileData.filters ?? inferredFilters;
   const queries = profileData._opportunityQueries ?? [];
   profileData._opportunityQueries = undefined;
 
@@ -112,7 +127,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   return NextResponse.json({
     message: parsed.reply,
     suggestions: [],
-    confidence: parsed.confidence ?? 0,
+    confidence: Math.max(computedConfidence, confidenceFromFilters(profileData.filters ?? {})),
     done: true,
     profile: profileData,
   });

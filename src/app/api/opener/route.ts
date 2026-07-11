@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
-import { buildRetrievalBlock } from "~/lib/opportunities";
+import { buildRetrievalBlockFromCandidates } from "~/lib/opportunities";
 import { OPENER_SYSTEM_PROMPT, OPENING_MESSAGE, parseOpener } from "~/lib/prompts";
+import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type { OpenerRequest, OpenerResponse } from "~/lib/types";
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
@@ -23,9 +24,9 @@ export async function POST(request: Request): Promise<NextResponse<OpenerRespons
   }
 
   const categories = Array.isArray(body.categories) ? body.categories : [];
-  const retrievalBlock = buildRetrievalBlock(
-    categories.length === 1 ? { category: categories[0] } : {},
-  );
+  const filters = categories.length === 1 ? { category: categories[0] } : {};
+  const candidates = await semanticRetrieve(anthropic, categories.join(", "), filters);
+  const retrievalBlock = buildRetrievalBlockFromCandidates(candidates);
   const situation = categories.length
     ? `Their picked categories from a quick tap-only warm-up: ${categories.join(", ")}.`
     : `They haven't picked any category yet — keep the opening question broad and easy.`;

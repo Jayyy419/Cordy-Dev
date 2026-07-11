@@ -6,14 +6,20 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { InterestTag } from "~/components/InterestTag";
 import { OpportunityCard } from "~/components/OpportunityCard";
+import { copyToClipboard } from "~/lib/clipboard";
+import { explainMatch } from "~/lib/opportunities";
 import type { ProfileData } from "~/lib/types";
 
 const RESUME_KEYS = ["cordy_chat_transcript", "cordy_questions_asked", "cordy_max_override"];
+const NOTIFY_STORAGE_KEY = "cordy_notify_signups";
 
 export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState("");
+  const [notifySubmitted, setNotifySubmitted] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem("cordy_profile");
@@ -34,6 +40,38 @@ export default function ProfilePage() {
     // every time it hands off to this results screen — resuming just means
     // going back to /chat and letting it pick those markers up.
     router.push("/chat");
+  }
+
+  async function shareWithGuardian() {
+    if (!profile) return;
+    // No real backend to persist a shareable record against, so the profile
+    // snapshot itself is encoded into the URL — genuinely shareable and
+    // read-only without needing server storage. A production version would
+    // instead mint a short server-side link against a stored record.
+    const encoded = btoa(encodeURIComponent(JSON.stringify(profile)));
+    const url = `${window.location.origin}/shared?data=${encoded}`;
+    const ok = await copyToClipboard(url);
+    if (ok) {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2500);
+    }
+  }
+
+  function submitNotify(e: React.FormEvent) {
+    e.preventDefault();
+    if (!notifyEmail.trim()) return;
+    // PLACEHOLDER — no real email/SMS provider is wired up here. This just
+    // records the opt-in locally so the concept is demonstrable; swap for a
+    // real notification job once a backend exists.
+    try {
+      const raw = localStorage.getItem(NOTIFY_STORAGE_KEY);
+      const list = raw ? (JSON.parse(raw) as string[]) : [];
+      list.push(notifyEmail.trim());
+      localStorage.setItem(NOTIFY_STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // storage unavailable — non-fatal
+    }
+    setNotifySubmitted(true);
   }
 
   if (loaded && !profile) {
@@ -83,6 +121,13 @@ export default function ProfilePage() {
           )}
         </div>
 
+        <button
+          onClick={() => void shareWithGuardian()}
+          className="mt-4 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+        >
+          {shareCopied ? "Link copied! ✓" : "👪 Share with a parent/guardian →"}
+        </button>
+
         {hasMatches && (
           <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
             <h2 className="font-heading text-base font-bold text-cordy-ink">Matched for you</h2>
@@ -91,11 +136,46 @@ export default function ProfilePage() {
             </p>
             <div className="flex flex-col gap-3">
               {profile.opportunities.map((opp) => (
-                <OpportunityCard key={opp.id} opportunity={opp} />
+                <OpportunityCard
+                  key={opp.id}
+                  opportunity={opp}
+                  matchReasons={explainMatch(opp, profile.filters ?? {})}
+                />
               ))}
             </div>
           </div>
         )}
+
+        <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
+          <h2 className="font-heading text-sm font-bold text-cordy-ink">Nothing quite right yet?</h2>
+          {notifySubmitted ? (
+            <p className="mt-1 text-xs font-semibold text-cordy-teal">
+              ✓ We&apos;ll ping you when something new matches!
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 mb-2.5 text-xs leading-relaxed text-cordy-ink/70">
+                Get an email when a new opportunity matches your profile.
+              </p>
+              <form onSubmit={submitNotify} className="flex gap-2">
+                <input
+                  type="email"
+                  required
+                  value={notifyEmail}
+                  onChange={(e) => setNotifyEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  className="min-w-0 flex-1 rounded-full border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2 text-xs text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
+                />
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-full border-2 border-cordy-ink bg-cordy-teal px-3.5 py-2 text-xs font-bold text-cordy-ink"
+                >
+                  Notify me
+                </button>
+              </form>
+            </>
+          )}
+        </div>
 
         <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
           <h2 className="font-heading text-sm font-bold text-cordy-ink">
@@ -131,4 +211,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

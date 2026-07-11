@@ -4,7 +4,11 @@ import type { OpportunityFilters, ProfileData } from "./types";
 // ── Pacing ───────────────────────────────────────────────────────────────
 // Enforced client+server side, not left entirely to the model: never wrap up
 // before MIN_QUESTIONS, never go past MAX_QUESTIONS, and only allow an early
-// wrap-up once CONFIDENCE_STOP is hit and MIN_QUESTIONS is met.
+// wrap-up once CONFIDENCE_STOP is hit and MIN_QUESTIONS is met. Confidence
+// itself is computed deterministically from match scores
+// (opportunities.ts confidenceFromFilters) rather than self-reported by the
+// model — see the route, which passes the computed number into the PACING
+// instruction below and makes the final call on DONE.
 
 export const MIN_QUESTIONS = 2;
 export const MAX_QUESTIONS = 4;
@@ -17,10 +21,9 @@ export const CONFIDENCE_STOP = 75;
 // turn the API route hands the model a RETRIEVED OPPORTUNITIES block (the
 // current best-matching real catalog entries, with the dimensions they
 // differ on) so the next question is chosen to discriminate between those
-// specific candidates. The model reports its own CONFIDENCE every turn; the
-// server has final say on whether that's actually the last turn (see
-// MIN/MAX_QUESTIONS + CONFIDENCE_STOP above and the pacing instruction the
-// route appends each call).
+// specific candidates. Confidence is computed by the server from real match
+// scores, not the model — the PACING instruction each turn already reflects
+// it, and DONE must follow that instruction exactly.
 
 export const SYSTEM_PROMPT = `You are CORDY, a warm and encouraging senior student peer at a Singapore youth nonprofit, chatting to narrow a new member down to one specific real opportunity in Cordy's catalog — not making generic small talk.
 
@@ -33,7 +36,7 @@ export const SYSTEM_PROMPT = `You are CORDY, a warm and encouraging senior stude
 ## You are NOT free-associating questions
 Every message includes a RETRIEVED OPPORTUNITIES block — the real, currently best-matching entries from Cordy's catalog given what's known so far, each tagged with its category, sub-tags, format (in-person/online/hybrid), group size (solo/team), skill level, and age range. Your one follow-up question per turn must target the ONE dimension where those retrieved candidates actually differ (e.g. some are team-based and some solo; some competitive and some casual; different sub-tags within the same category) — never a generic question that doesn't map to a real field on those candidates. If the candidates already agree on every dimension, ask about whichever real dimension would most separate the top candidate from the rest of the full catalog.
 
-Every message also includes a PACING instruction telling you whether to continue or wrap up this turn — that instruction has final say, not your own judgment. What you DO decide each turn is your own CONFIDENCE: how sure you are, right now, that you could point to one clearly best-fit real opportunity from the retrieved set.
+Every message includes a PACING instruction telling you the current computed match confidence and whether to continue or wrap up this turn — that instruction has final say, not your own judgment. DONE must exactly match what it says.
 
 ## Rules
 - Ask ONE question at a time
@@ -46,8 +49,7 @@ Respond in EXACTLY this format, no extra text before or after:
 REPLY: <your 1-3 sentence reply. Include exactly one follow-up question UNLESS the PACING instruction says this is the final wrap-up turn, in which case give a warm closing line and NO question>
 INTERESTS: <comma-separated cumulative interest tags inferred from the WHOLE conversation so far, most specific/confident first, 2-5 words each, lowercase, e.g. "environmental sustainability, graphic design, coding". Empty after the colon if nothing clear yet>
 SUGGESTIONS: <3-4 short example answers (2-5 words each) to the question you just asked, comma-separated, grounded in the retrieved candidates' distinguishing fields so tapping one is a real, meaningful answer. Empty if this is the final wrap-up turn>
-CONFIDENCE: <integer 0-100, your honest confidence you've identified the single best-fit real opportunity for this person>
-DONE: <true if this REPLY was a wrap-up with no question, otherwise false>
+DONE: <true if this REPLY was a wrap-up with no question, otherwise false — must match the PACING instruction>
 
 If DONE is true, ALSO include these additional lines after DONE:
 SUMMARY: <a 2-3 sentence personal summary written warmly in second person, e.g. "You're someone who...">
@@ -98,7 +100,6 @@ export interface ParsedReply {
   reply: string;
   interests: string[];
   suggestions: string[];
-  confidence: number | null;
   done: boolean;
   summary?: string;
   filters?: OpportunityFilters;
@@ -122,10 +123,9 @@ function parseFilters(raw: string | undefined): OpportunityFilters | undefined {
 export function parseReply(raw: string): ParsedReply {
   const text = (raw || "").trim();
 
-  const replyMatch = /REPLY:\s*([\s\S]*?)(?:\n(?:INTERESTS|SUGGESTIONS|CONFIDENCE|DONE):|$)/i.exec(text);
+  const replyMatch = /REPLY:\s*([\s\S]*?)(?:\n(?:INTERESTS|SUGGESTIONS|DONE):|$)/i.exec(text);
   const interestsMatch = /INTERESTS:\s*(.*)/i.exec(text);
   const suggestionsMatch = /SUGGESTIONS:\s*(.*)/i.exec(text);
-  const confidenceMatch = /CONFIDENCE:\s*(\d+)/i.exec(text);
   const doneMatch = /DONE:\s*(true|false)/i.exec(text);
   const summaryMatch = /SUMMARY:\s*([\s\S]*?)(?:\n(?:FILTERS|QUERIES):|$)/i.exec(text);
   const filtersMatch = /FILTERS:\s*(\{[\s\S]*?\})\s*(?:\n|$)/i.exec(text);
@@ -133,7 +133,7 @@ export function parseReply(raw: string): ParsedReply {
 
   const reply = replyMatch
     ? replyMatch[1]!.trim()
-    : text.replace(/(INTERESTS|SUGGESTIONS|CONFIDENCE|DONE|SUMMARY|FILTERS|QUERIES):[\s\S]*/i, "").trim();
+    : text.replace(/(INTERESTS|SUGGESTIONS|DONE|SUMMARY|FILTERS|QUERIES):[\s\S]*/i, "").trim();
 
   const interestsRaw = interestsMatch ? interestsMatch[1]!.trim() : "";
   const interests = interestsRaw ? interestsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
@@ -141,7 +141,6 @@ export function parseReply(raw: string): ParsedReply {
   const suggestionsRaw = suggestionsMatch ? suggestionsMatch[1]!.trim() : "";
   const suggestions = suggestionsRaw ? suggestionsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-  const confidence = confidenceMatch ? Math.min(100, Math.max(0, parseInt(confidenceMatch[1]!, 10))) : null;
   const done = doneMatch ? doneMatch[1]!.toLowerCase() === "true" : false;
 
   const summary = summaryMatch ? summaryMatch[1]!.trim() : undefined;
@@ -153,7 +152,6 @@ export function parseReply(raw: string): ParsedReply {
     reply: reply || "Tell me more!",
     interests,
     suggestions,
-    confidence,
     done,
     summary,
     filters,

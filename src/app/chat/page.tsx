@@ -78,11 +78,17 @@ export default function ChatPage() {
   const [done, setDone] = useState(false);
   const [mouthAnim, setMouthAnim] = useState<MouthAnim>(null);
   const [pendingProfile, setPendingProfile] = useState<ChatResponse["profile"] | null>(null);
+  const [listening, setListening] = useState(false);
+  const [voiceSupported] = useState(
+    () =>
+      typeof window !== "undefined" && !!(window.SpeechRecognition ?? window.webkitSpeechRecognition),
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startedRef = useRef(false);
   const profileId = useRef(typeof window === "undefined" ? "p_local" : getOrCreateProfileId());
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -251,6 +257,35 @@ export default function ChatPage() {
     void sendMessage(input);
   }
 
+  // Voice input — Chromium-only Web Speech API, feature-detected above so
+  // the mic button simply doesn't render on browsers without support
+  // (notably Safari/Firefox). No server round-trip: transcription happens
+  // entirely in-browser and just fills the text input for the user to
+  // review before sending.
+  function toggleVoiceInput() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SpeechRecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "en-SG";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript;
+      if (transcript) setInput(transcript);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
+
   const mouthAnimClass =
     mouthAnim === "chomp" ? "animate-mouth-chomp" : mouthAnim === "celebrate" ? "animate-mouth-celebrate" : "";
   // Matches the original design: the bar tracks CORDY's own confidence, not
@@ -382,9 +417,22 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={busy}
-                placeholder={busy ? "CORDY is typing…" : "Tell CORDY anything…"}
+                placeholder={listening ? "Listening…" : busy ? "CORDY is typing…" : "Tell CORDY anything…"}
                 className="min-w-0 flex-1 rounded-full border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal disabled:opacity-50 sm:px-4 sm:py-2.5"
               />
+              {voiceSupported && (
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  disabled={busy}
+                  aria-label={listening ? "Stop voice input" : "Start voice input"}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 disabled:opacity-40 sm:h-10 sm:w-10 ${
+                    listening ? "bg-cordy-red text-white" : "bg-white text-cordy-ink"
+                  }`}
+                >
+                  🎤
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={busy || !input.trim()}
