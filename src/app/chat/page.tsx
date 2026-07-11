@@ -169,7 +169,11 @@ export default function ChatPage() {
       const data = (await res.json()) as ChatResponse;
       const nextHistory = [...history, createMessage("assistant", data.message)];
       setMessages(nextHistory);
-      setConfidence(data.confidence);
+      // CORDY's own confidence estimate can honestly dip on a surprising or
+      // broadening answer, but showing that as a visible regression reads as
+      // a bug — display the high-water mark instead. Pacing on the server
+      // still uses the model's raw per-turn value.
+      setConfidence((prev) => Math.max(prev, data.confidence));
 
       const nextQuestionsAsked = data.profile ? questionsAsked : questionsAsked + 1;
       const nextTags = data.profile?.tags ?? profile;
@@ -255,7 +259,7 @@ export default function ChatPage() {
   const profileCount = profile.length;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center gap-3 bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
+    <div className="flex h-dvh flex-col items-center gap-3 overflow-hidden bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
       {/* Status row above the card */}
       <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
@@ -273,7 +277,7 @@ export default function ChatPage() {
 
       {/* CORDY card: mane + eyes + mouth-as-chat-window */}
       <div
-        className="relative flex w-full max-w-[820px] flex-1 flex-col overflow-hidden rounded-[28px] border-4 border-cordy-ink shadow-[0_20px_45px_rgba(22,33,62,0.2)] sm:flex-none sm:rounded-[52px]"
+        className="relative flex min-h-0 w-full max-w-[820px] flex-1 flex-col overflow-hidden rounded-[28px] border-4 border-cordy-ink shadow-[0_20px_45px_rgba(22,33,62,0.2)] sm:flex-none sm:rounded-[52px]"
         style={{ background: "linear-gradient(160deg, #ffd9a0 0%, #ffc27a 100%)" }}
       >
         {/* mane */}
@@ -340,7 +344,7 @@ export default function ChatPage() {
           {/* messages */}
           <div
             ref={listRef}
-            className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pt-2.5 pb-1.5 sm:gap-2.5 sm:px-4 sm:pt-3.5"
+            className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pt-2.5 pb-1.5 sm:gap-2.5 sm:px-4 sm:pt-3.5"
           >
             {messages.map((msg, i) => (
               <ChatBubble
