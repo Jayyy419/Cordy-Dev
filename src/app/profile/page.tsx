@@ -56,9 +56,9 @@ export default function ProfilePage() {
   const hasMatches = profile.opportunities.length > 0;
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-cordy-cream px-6 py-12">
-      <div className="animate-bounce-in w-full max-w-[560px] rounded-[44px] border-4 border-cordy-ink bg-white p-11 text-center shadow-[0_30px_60px_rgba(22,33,62,0.22)]">
-        <div className="animate-mascot-bounce mx-auto mb-5 h-24 w-24 overflow-hidden rounded-full border-4 border-cordy-red bg-[#ffd28f]">
+    <div className="flex min-h-dvh items-center justify-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
+      <div className="animate-bounce-in w-full max-w-[560px] rounded-[32px] border-4 border-cordy-ink bg-white p-6 text-center shadow-[0_30px_60px_rgba(22,33,62,0.22)] sm:rounded-[44px] sm:p-11">
+        <div className="animate-mascot-bounce mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border-4 border-cordy-red bg-[#ffd28f] sm:mb-5 sm:h-24 sm:w-24">
           <Image
             src="/cordy-mascot.png"
             alt="CORDY"
@@ -68,7 +68,9 @@ export default function ProfilePage() {
           />
         </div>
 
-        <h1 className="font-heading text-2xl font-extrabold text-cordy-ink">Your Interest Profile</h1>
+        <h1 className="font-heading text-xl font-extrabold text-cordy-ink sm:text-2xl">
+          Your Interest Profile
+        </h1>
         <p className="mt-2 text-sm leading-relaxed text-cordy-ink/70">{profile.summary}</p>
 
         <div className="mt-6 flex flex-wrap justify-center gap-2">

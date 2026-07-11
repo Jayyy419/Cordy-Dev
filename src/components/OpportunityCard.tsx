@@ -9,7 +9,7 @@ interface OpportunityCardProps {
 
 export function OpportunityCard({ opportunity }: OpportunityCardProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border-2 border-cordy-ink bg-white p-5 shadow-[4px_4px_0_0_var(--color-cordy-ink)]">
+    <div className="flex flex-col gap-2.5 rounded-2xl border-2 border-cordy-ink bg-white p-4 text-left shadow-[4px_4px_0_0_var(--color-cordy-ink)] sm:gap-3 sm:p-5">
       <h3 className="font-heading text-lg font-bold text-cordy-ink">
         {opportunity.title}
       </h3>

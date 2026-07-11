@@ -255,17 +255,17 @@ export default function ChatPage() {
   const profileCount = profile.length;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center gap-4 bg-cordy-cream px-4 py-8">
+    <div className="flex min-h-dvh flex-col items-center gap-3 bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
       {/* Status row above the card */}
-      <div className="flex w-full max-w-[820px] items-center justify-between">
-        <span className="text-xs font-semibold text-cordy-ink/60">
+      <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
           {profileCount > 0
             ? `🔍 CORDY's spotted ${profileCount} thing${profileCount === 1 ? "" : "s"} about you so far`
             : ""}
         </span>
         <button
           onClick={skipToResults}
-          className="text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+          className="shrink-0 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
         >
           Skip for now →
         </button>
@@ -273,11 +273,11 @@ export default function ChatPage() {
 
       {/* CORDY card: mane + eyes + mouth-as-chat-window */}
       <div
-        className="relative flex w-full max-w-[820px] flex-shrink-0 flex-col overflow-hidden rounded-[52px] border-4 border-cordy-ink shadow-[0_20px_45px_rgba(22,33,62,0.2)]"
+        className="relative flex w-full max-w-[820px] flex-1 flex-col overflow-hidden rounded-[28px] border-4 border-cordy-ink shadow-[0_20px_45px_rgba(22,33,62,0.2)] sm:flex-none sm:rounded-[52px]"
         style={{ background: "linear-gradient(160deg, #ffd9a0 0%, #ffc27a 100%)" }}
       >
         {/* mane */}
-        <div className="relative h-16 flex-shrink-0">
+        <div className="relative h-9 flex-shrink-0 [--mane-scale:0.55] sm:h-16 sm:[--mane-scale:1]">
           {[
             { l: "6%", t: "2px", h: 46, r: -18 },
             { l: "17%", t: "-8px", h: 54, r: -8 },
@@ -290,11 +290,12 @@ export default function ChatPage() {
           ].map((spike, i) => (
             <div
               key={i}
-              className="absolute w-9 rounded-2xl bg-cordy-red"
+              className="absolute rounded-2xl bg-cordy-red"
               style={{
                 left: spike.l,
-                top: spike.t,
-                height: `${spike.h}px`,
+                top: `calc(${spike.t} * var(--mane-scale))`,
+                height: `calc(${spike.h}px * var(--mane-scale))`,
+                width: `calc(2.25rem * var(--mane-scale))`,
                 transform: `rotate(${spike.r}deg)`,
               }}
             />
@@ -302,41 +303,45 @@ export default function ChatPage() {
         </div>
 
         {/* eyes */}
-        <div className="relative z-10 mt-1 flex flex-shrink-0 justify-center gap-24 sm:gap-36">
+        <div className="relative z-10 mt-1 flex flex-shrink-0 justify-center gap-9 sm:gap-24 md:gap-36">
           <div
-            className="relative h-9 w-6 rounded-full bg-cordy-ink"
+            className="relative h-6 w-4 rounded-full bg-cordy-ink sm:h-9 sm:w-6"
             style={{ transform: "rotate(-10deg)" }}
           >
-            <div className="absolute top-2 left-1.5 h-2 w-2 rounded-full bg-white" />
+            <div className="absolute top-1.5 left-1 h-1.5 w-1.5 rounded-full bg-white sm:top-2 sm:left-1.5 sm:h-2 sm:w-2" />
           </div>
           <div
-            className="relative h-9 w-6 rounded-full bg-cordy-ink"
+            className="relative h-6 w-4 rounded-full bg-cordy-ink sm:h-9 sm:w-6"
             style={{ transform: "rotate(10deg)" }}
           >
-            <div className="absolute top-2 right-1.5 h-2 w-2 rounded-full bg-white" />
+            <div className="absolute top-1.5 right-1 h-1.5 w-1.5 rounded-full bg-white sm:top-2 sm:right-1.5 sm:h-2 sm:w-2" />
           </div>
         </div>
 
         {/* mouth = chat window */}
         <div
-          className={`m-6 flex h-[560px] flex-col overflow-hidden rounded-[36px] border-4 border-cordy-ink bg-white shadow-[inset_0_8px_16px_rgba(0,0,0,0.08)] sm:h-[600px] ${mouthAnimClass}`}
+          className={`m-2.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border-4 border-cordy-ink bg-white shadow-[inset_0_8px_16px_rgba(0,0,0,0.08)] sm:m-6 sm:h-[600px] sm:flex-none sm:rounded-[36px] ${mouthAnimClass}`}
           style={{ transformOrigin: "50% 0%" }}
         >
           {/* progress bar */}
-          <div className="flex flex-shrink-0 items-center gap-2.5 px-5 pt-3.5">
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-cordy-cream">
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 px-3 pt-2.5 sm:gap-2.5 sm:px-5 sm:pt-3.5">
+            <div className="h-2 min-w-[60px] flex-1 overflow-hidden rounded-full bg-cordy-cream">
               <div
                 className="h-full rounded-full bg-cordy-red transition-all duration-500"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
             <span className="shrink-0 text-xs font-semibold whitespace-nowrap text-cordy-ink/60">
-              {done ? "All done!" : `Question ${questionsAsked} · ${confidence}% confident`}
+              {done ? "All done!" : `Q${questionsAsked} · ${confidence}%`}
+              <span className="hidden sm:inline"> confident</span>
             </span>
           </div>
 
           {/* messages */}
-          <div ref={listRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-4 pt-3.5 pb-1.5">
+          <div
+            ref={listRef}
+            className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pt-2.5 pb-1.5 sm:gap-2.5 sm:px-4 sm:pt-3.5"
+          >
             {messages.map((msg, i) => (
               <ChatBubble
                 key={msg.id}
@@ -355,7 +360,7 @@ export default function ChatPage() {
 
           {/* footer: done -> see profile, else input */}
           {done ? (
-            <div className="flex-shrink-0 px-4 pb-4">
+            <div className="flex-shrink-0 px-3 pb-3 sm:px-4 sm:pb-4">
               <button
                 onClick={seeProfileClick}
                 className="w-full rounded-2xl border-2 border-cordy-ink bg-cordy-red py-3 font-heading text-sm font-bold text-white shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
@@ -366,7 +371,7 @@ export default function ChatPage() {
           ) : (
             <form
               onSubmit={handleSubmit}
-              className="flex flex-shrink-0 gap-2 border-t-2 border-cordy-cream bg-white px-4 py-3"
+              className="flex flex-shrink-0 gap-2 border-t-2 border-cordy-cream bg-white px-3 py-2.5 sm:px-4 sm:py-3"
             >
               <input
                 ref={inputRef}
@@ -374,12 +379,12 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 disabled={busy}
                 placeholder={busy ? "CORDY is typing…" : "Tell CORDY anything…"}
-                className="flex-1 rounded-full border-2 border-cordy-cream bg-cordy-cream px-4 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal disabled:opacity-50"
+                className="min-w-0 flex-1 rounded-full border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal disabled:opacity-50 sm:px-4 sm:py-2.5"
               />
               <button
                 type="submit"
                 disabled={busy || !input.trim()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-cordy-ink bg-cordy-teal text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 disabled:opacity-40"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-cordy-ink bg-cordy-teal text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 disabled:opacity-40 sm:h-10 sm:w-10"
               >
                 ↑
               </button>
