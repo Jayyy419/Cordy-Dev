@@ -249,7 +249,9 @@ export default function ChatPage() {
 
   const mouthAnimClass =
     mouthAnim === "chomp" ? "animate-mouth-chomp" : mouthAnim === "celebrate" ? "animate-mouth-celebrate" : "";
-  const progressPct = Math.min(100, Math.round((questionsAsked / effectiveMax) * 100));
+  // Matches the original design: the bar tracks CORDY's own confidence, not
+  // just how many questions have been asked — the label states both.
+  const progressPct = done ? 100 : Math.max(0, Math.min(100, confidence));
   const profileCount = profile.length;
 
   return (
