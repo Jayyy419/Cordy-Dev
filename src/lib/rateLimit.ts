@@ -57,3 +57,28 @@ export function clientIpFrom(request: Request): string {
   if (forwarded) return forwarded.split(",")[0]!.trim();
   return request.headers.get("x-real-ip") ?? "unknown";
 }
+
+// ── Combined IP + session check ─────────────────────────────────────────
+// Requires the request to pass BOTH independent buckets. Clearing cookies
+// alone still falls back to the IP bucket (already consumed by the same
+// browser); switching IP (VPN, mobile network) alone still falls back to
+// the session-cookie bucket. Defeating both at once is the realistic
+// ceiling of any anonymous-only mitigation — see session.ts for why a real
+// fix requires per-authenticated-user limiting once accounts exist.
+
+export function checkCombinedRateLimit(
+  ip: string,
+  sessionId: string | null,
+  limit: number,
+  windowMs: number,
+): RateLimitResult {
+  const ipResult = checkRateLimit(`ip:${ip}`, limit, windowMs);
+  const sessionResult = sessionId
+    ? checkRateLimit(`sid:${sessionId}`, limit, windowMs)
+    : { allowed: true, retryAfterSeconds: 0 };
+
+  return {
+    allowed: ipResult.allowed && sessionResult.allowed,
+    retryAfterSeconds: Math.max(ipResult.retryAfterSeconds, sessionResult.retryAfterSeconds),
+  };
+}

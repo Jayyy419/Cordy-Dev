@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { buildRetrievalBlockFromCandidates } from "~/lib/opportunities";
 import { OPENER_SYSTEM_PROMPT, OPENING_MESSAGE, parseOpener } from "~/lib/prompts";
-import { checkRateLimit, clientIpFrom } from "~/lib/rateLimit";
+import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
+import { ensureSessionCookie, readSessionId } from "~/lib/session";
 import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type { OpenerRequest, OpenerResponse } from "~/lib/types";
 
@@ -19,14 +20,27 @@ const FALLBACK_SUGGESTIONS = [
 const OPENER_RATE_LIMIT = 20;
 const OPENER_RATE_WINDOW_MS = 5 * 60 * 1000;
 
+/** Wraps NextResponse.json and always attaches the anonymous session cookie, on every exit path. */
+function respond(
+  request: Request,
+  body: OpenerResponse,
+  init?: ResponseInit,
+): NextResponse<OpenerResponse> {
+  const res = NextResponse.json(body, init);
+  ensureSessionCookie(request, res);
+  return res;
+}
+
 export async function POST(request: Request): Promise<NextResponse<OpenerResponse>> {
-  const { allowed, retryAfterSeconds } = checkRateLimit(
+  const { allowed, retryAfterSeconds } = checkCombinedRateLimit(
     clientIpFrom(request),
+    readSessionId(request),
     OPENER_RATE_LIMIT,
     OPENER_RATE_WINDOW_MS,
   );
   if (!allowed) {
-    return NextResponse.json(
+    return respond(
+      request,
       { message: OPENING_MESSAGE, suggestions: FALLBACK_SUGGESTIONS },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
     );
@@ -58,9 +72,9 @@ export async function POST(request: Request): Promise<NextResponse<OpenerRespons
     const block = response.content[0];
     if (block?.type !== "text") throw new Error("Unexpected response type from Claude");
 
-    return NextResponse.json(parseOpener(block.text));
+    return respond(request, parseOpener(block.text));
   } catch (err) {
     console.error("[opener/route] Claude API error:", err);
-    return NextResponse.json({ message: OPENING_MESSAGE, suggestions: FALLBACK_SUGGESTIONS });
+    return respond(request, { message: OPENING_MESSAGE, suggestions: FALLBACK_SUGGESTIONS });
   }
 }

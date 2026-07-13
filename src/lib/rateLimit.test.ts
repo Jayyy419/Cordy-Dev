@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkRateLimit, clientIpFrom } from "./rateLimit";
+import { checkCombinedRateLimit, checkRateLimit, clientIpFrom } from "./rateLimit";
 
 describe("checkRateLimit", () => {
   it("allows requests under the limit", () => {
@@ -34,6 +34,40 @@ describe("checkRateLimit", () => {
     checkRateLimit(keyA, 1, 60_000);
     expect(checkRateLimit(keyA, 1, 60_000).allowed).toBe(false);
     expect(checkRateLimit(keyB, 1, 60_000).allowed).toBe(true);
+  });
+});
+
+describe("checkCombinedRateLimit", () => {
+  it("blocks once the IP bucket alone is exhausted, even with a fresh session", () => {
+    const ip = `ip-${crypto.randomUUID()}`;
+    for (let i = 0; i < 3; i++) checkCombinedRateLimit(ip, `sid-${i}`, 3, 60_000);
+    // Same IP, brand-new session id each time (simulates clearing cookies) — still blocked.
+    const result = checkCombinedRateLimit(ip, `sid-new-${crypto.randomUUID()}`, 3, 60_000);
+    expect(result.allowed).toBe(false);
+  });
+
+  it("blocks once the session bucket alone is exhausted, even with a fresh IP", () => {
+    const sid = `sid-${crypto.randomUUID()}`;
+    for (let i = 0; i < 3; i++) checkCombinedRateLimit(`ip-${i}`, sid, 3, 60_000);
+    // Same session, brand-new IP each time (simulates switching networks/VPN) — still blocked.
+    const result = checkCombinedRateLimit(`ip-new-${crypto.randomUUID()}`, sid, 3, 60_000);
+    expect(result.allowed).toBe(false);
+  });
+
+  it("allows the request when both a fresh IP and a fresh session are used", () => {
+    const result = checkCombinedRateLimit(
+      `ip-${crypto.randomUUID()}`,
+      `sid-${crypto.randomUUID()}`,
+      3,
+      60_000,
+    );
+    expect(result.allowed).toBe(true);
+  });
+
+  it("only checks the IP bucket when there's no session id yet", () => {
+    const ip = `ip-${crypto.randomUUID()}`;
+    for (let i = 0; i < 3; i++) checkCombinedRateLimit(ip, null, 3, 60_000);
+    expect(checkCombinedRateLimit(ip, null, 3, 60_000).allowed).toBe(false);
   });
 });
 

@@ -15,7 +15,8 @@ import {
   parseReply,
   SYSTEM_PROMPT,
 } from "~/lib/prompts";
-import { checkRateLimit, clientIpFrom } from "~/lib/rateLimit";
+import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
+import { ensureSessionCookie, readSessionId } from "~/lib/session";
 import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type {
   ChatRequest,
@@ -31,14 +32,27 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: 30_000
 const CHAT_RATE_LIMIT = 20;
 const CHAT_RATE_WINDOW_MS = 5 * 60 * 1000;
 
+/** Wraps NextResponse.json and always attaches the anonymous session cookie, on every exit path. */
+function respond(
+  request: Request,
+  body: ChatResponse,
+  init?: ResponseInit,
+): NextResponse<ChatResponse> {
+  const res = NextResponse.json(body, init);
+  ensureSessionCookie(request, res);
+  return res;
+}
+
 export async function POST(request: Request): Promise<NextResponse<ChatResponse>> {
-  const { allowed, retryAfterSeconds } = checkRateLimit(
+  const { allowed, retryAfterSeconds } = checkCombinedRateLimit(
     clientIpFrom(request),
+    readSessionId(request),
     CHAT_RATE_LIMIT,
     CHAT_RATE_WINDOW_MS,
   );
   if (!allowed) {
-    return NextResponse.json(
+    return respond(
+      request,
       {
         message: "CORDY needs a quick breather — try again in a minute!",
         suggestions: [],
@@ -53,7 +67,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   try {
     body = (await request.json()) as ChatRequest;
   } catch {
-    return NextResponse.json(
+    return respond(
+      request,
       { message: "Invalid request body", suggestions: [], confidence: 0, done: false },
       { status: 400 },
     );
@@ -61,7 +76,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
 
   const { messages, questionsAsked, maxQuestions } = body;
   if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json(
+    return respond(
+      request,
       { message: "messages must be a non-empty array", suggestions: [], confidence: 0, done: false },
       { status: 400 },
     );
@@ -119,7 +135,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     rawMessage = block.text;
   } catch (err) {
     console.error("[chat/route] Claude API error:", err);
-    return NextResponse.json(
+    return respond(
+      request,
       { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false },
       { status: 502 },
     );
@@ -129,7 +146,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   const done = forcedFinal ? true : forcedContinue ? false : parsed.done;
 
   if (!done) {
-    return NextResponse.json({
+    return respond(request, {
       message: parsed.reply,
       suggestions: parsed.suggestions,
       confidence: computedConfidence,
@@ -147,7 +164,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
 
   profileData.opportunities = await fetchOpportunities(queries, profileData.tags, profileData.filters);
 
-  return NextResponse.json({
+  return respond(request, {
     message: parsed.reply,
     suggestions: [],
     confidence: Math.max(computedConfidence, confidenceFromFilters(profileData.filters ?? {})),
