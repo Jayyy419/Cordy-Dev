@@ -20,6 +20,31 @@ function createMessage(role: Message["role"], content: string): Message {
   return { id: crypto.randomUUID(), role, content };
 }
 
+const FETCH_TIMEOUT_MS = 20_000;
+
+async function fetchJson<T>(url: string, body: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = (await res.json()) as T & { message?: string };
+    if (!res.ok) {
+      // Rate-limit (429) and API-error (502) responses both carry a
+      // user-facing `message` already — surface that instead of a generic
+      // "API error 502".
+      throw new Error(data.message ?? `Request failed (${res.status})`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function readMcqCategories(): string[] {
   try {
     const raw = localStorage.getItem(MCQ_CATEGORIES_STORAGE_KEY);
@@ -78,6 +103,7 @@ export default function ChatPage() {
   const [done, setDone] = useState(false);
   const [mouthAnim, setMouthAnim] = useState<MouthAnim>(null);
   const [pendingProfile, setPendingProfile] = useState<ChatResponse["profile"] | null>(null);
+  const [lastFailedContent, setLastFailedContent] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceSupported] = useState(
     () =>
@@ -111,12 +137,7 @@ export default function ChatPage() {
   async function loadOpener() {
     setBusy(true);
     try {
-      const res = await fetch("/api/opener", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories: mcqCategories }),
-      });
-      const data = (await res.json()) as OpenerResponse;
+      const data = await fetchJson<OpenerResponse>("/api/opener", { categories: mcqCategories });
       const opener = [createMessage("assistant", data.message)];
       setMessages(opener);
       setSuggestions(data.suggestions);
@@ -160,19 +181,11 @@ export default function ChatPage() {
     setSuggestions([]);
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: history.map(({ role, content: c }) => ({ role, content: c })),
-          questionsAsked,
-          maxQuestions: effectiveMax,
-        }),
+      const data = await fetchJson<ChatResponse>("/api/chat", {
+        messages: history.map(({ role, content: c }) => ({ role, content: c })),
+        questionsAsked,
+        maxQuestions: effectiveMax,
       });
-
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-
-      const data = (await res.json()) as ChatResponse;
       const nextHistory = [...history, createMessage("assistant", data.message)];
       setMessages(nextHistory);
       // CORDY's own confidence estimate can honestly dip on a surprising or
@@ -204,14 +217,32 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error(err);
+      const timedOut = err instanceof DOMException && err.name === "AbortError";
       setMessages((prev) => [
         ...prev,
-        createMessage("assistant", "Aiya, something went wrong on my end! Can you try sending that again?"),
+        createMessage(
+          "assistant",
+          timedOut
+            ? "Aiya, that took too long! Give it another go?"
+            : "Aiya, something went wrong on my end! Can you try sending that again?",
+        ),
       ]);
+      setLastFailedContent(content);
+      setSuggestions(["Retry"]);
     }
 
     setBusy(false);
     setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  function handleSuggestionSelect(reply: string) {
+    if (reply === "Retry" && lastFailedContent) {
+      const retryContent = lastFailedContent;
+      setLastFailedContent(null);
+      void sendMessage(retryContent);
+      return;
+    }
+    void sendMessage(reply);
   }
 
   function editMessage(index: number) {
@@ -294,7 +325,7 @@ export default function ChatPage() {
   const profileCount = profile.length;
 
   return (
-    <div className="flex h-dvh flex-col items-center gap-3 overflow-hidden bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
+    <main className="flex h-dvh flex-col items-center gap-3 overflow-hidden bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
       {/* Status row above the card */}
       <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
@@ -364,7 +395,14 @@ export default function ChatPage() {
         >
           {/* progress bar */}
           <div className="flex flex-shrink-0 flex-wrap items-center gap-2 px-3 pt-2.5 sm:gap-2.5 sm:px-5 sm:pt-3.5">
-            <div className="h-2 min-w-[60px] flex-1 overflow-hidden rounded-full bg-cordy-cream">
+            <div
+              role="progressbar"
+              aria-valuenow={progressPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="CORDY's match confidence"
+              className="h-2 min-w-[60px] flex-1 overflow-hidden rounded-full bg-cordy-cream"
+            >
               <div
                 className="h-full rounded-full bg-cordy-red transition-all duration-500"
                 style={{ width: `${progressPct}%` }}
@@ -394,7 +432,7 @@ export default function ChatPage() {
 
           {/* suggestions */}
           {!busy && !done && suggestions.length > 0 && (
-            <QuickReplies replies={suggestions} onSelect={(r) => void sendMessage(r)} disabled={busy} />
+            <QuickReplies replies={suggestions} onSelect={handleSuggestionSelect} disabled={busy} />
           )}
 
           {/* footer: done -> see profile, else input */}
@@ -417,6 +455,7 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={busy}
+                aria-label="Message to CORDY"
                 placeholder={listening ? "Listening…" : busy ? "CORDY is typing…" : "Tell CORDY anything…"}
                 className="min-w-0 flex-1 rounded-full border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal disabled:opacity-50 sm:px-4 sm:py-2.5"
               />
@@ -436,6 +475,7 @@ export default function ChatPage() {
               <button
                 type="submit"
                 disabled={busy || !input.trim()}
+                aria-label="Send message"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-cordy-ink bg-cordy-teal text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 disabled:opacity-40 sm:h-10 sm:w-10"
               >
                 ↑
@@ -444,6 +484,6 @@ export default function ChatPage() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

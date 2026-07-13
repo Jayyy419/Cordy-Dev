@@ -19,6 +19,34 @@ body {
   color: var(--color-cordy-ink);
 }
 
+/* Visible keyboard-focus indicator. Several interactive elements use
+   outline-none for the mouse/touch appearance, which would otherwise
+   remove the focus ring entirely for keyboard users. :focus-visible only
+   applies this for keyboard/programmatic focus, not mouse clicks. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-cordy-teal);
+  outline-offset: 2px;
+}
+
+/* Respect the user's reduced-motion preference — disable the decorative
+   entrance/attention animations entirely rather than just speeding them up. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-bounce-in,
+  .animate-mouth-chomp,
+  .animate-mouth-celebrate,
+  .animate-mascot-bounce,
+  .animate-typing-dot {
+    animation: none !important;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes bounce-in {
   0% {
     opacity: 0;

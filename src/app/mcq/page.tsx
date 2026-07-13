@@ -70,7 +70,7 @@ export default function McqPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-16">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-16">
       <div className="w-full max-w-xl">
         <div className="mb-5 flex items-center justify-between sm:mb-6">
           <div className="flex items-center gap-3">
@@ -95,7 +95,14 @@ export default function McqPage() {
           </button>
         </div>
 
-        <div className="mb-6 h-2 overflow-hidden rounded-full bg-white sm:mb-7">
+        <div
+          role="progressbar"
+          aria-valuenow={progressPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Quiz progress"
+          className="mb-6 h-2 overflow-hidden rounded-full bg-white sm:mb-7"
+        >
           <div
             className="h-full rounded-full bg-cordy-teal transition-all"
             style={{ width: `${progressPct}%` }}
@@ -106,7 +113,11 @@ export default function McqPage() {
           {question.question}
         </h1>
 
-        <div className="flex flex-col gap-2.5 sm:gap-3">
+        <div
+          role="group"
+          aria-label={question.question}
+          className="flex flex-col gap-2.5 sm:gap-3"
+        >
           {question.options.map((opt) => {
             const isSelected = question.multi
               ? selected?.includes(opt.tag)
@@ -117,10 +128,14 @@ export default function McqPage() {
                 onClick={() =>
                   question.multi ? toggleMulti(opt.tag) : selectSingle(opt.tag)
                 }
+                aria-pressed={isSelected}
                 className="rounded-2xl border-2 border-cordy-ink bg-white px-4 py-3.5 text-left text-sm font-semibold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:px-5 sm:py-4"
               >
                 {isSelected && (
-                  <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-md bg-cordy-teal text-xs text-cordy-ink">
+                  <span
+                    aria-hidden="true"
+                    className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-md bg-cordy-teal text-xs text-cordy-ink"
+                  >
                     ✓
                   </span>
                 )}
@@ -140,6 +155,6 @@ export default function McqPage() {
           </button>
         )}
       </div>
-    </div>
+    </main>
   );
 }

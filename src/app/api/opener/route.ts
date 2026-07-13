@@ -3,10 +3,11 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { buildRetrievalBlockFromCandidates } from "~/lib/opportunities";
 import { OPENER_SYSTEM_PROMPT, OPENING_MESSAGE, parseOpener } from "~/lib/prompts";
+import { checkRateLimit, clientIpFrom } from "~/lib/rateLimit";
 import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type { OpenerRequest, OpenerResponse } from "~/lib/types";
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 2 });
 
 const FALLBACK_SUGGESTIONS = [
   "Something competitive",
@@ -15,7 +16,22 @@ const FALLBACK_SUGGESTIONS = [
   "Not sure yet",
 ];
 
+const OPENER_RATE_LIMIT = 20;
+const OPENER_RATE_WINDOW_MS = 5 * 60 * 1000;
+
 export async function POST(request: Request): Promise<NextResponse<OpenerResponse>> {
+  const { allowed, retryAfterSeconds } = checkRateLimit(
+    clientIpFrom(request),
+    OPENER_RATE_LIMIT,
+    OPENER_RATE_WINDOW_MS,
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { message: OPENING_MESSAGE, suggestions: FALLBACK_SUGGESTIONS },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
   let body: OpenerRequest;
   try {
     body = (await request.json()) as OpenerRequest;

@@ -15,6 +15,7 @@ import {
   parseReply,
   SYSTEM_PROMPT,
 } from "~/lib/prompts";
+import { checkRateLimit, clientIpFrom } from "~/lib/rateLimit";
 import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type {
   ChatRequest,
@@ -23,9 +24,31 @@ import type {
   OpportunityFilters,
 } from "~/lib/types";
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 2 });
+
+// Each turn costs two model calls (a fast rerank + the main reply), so the
+// window is a little tighter than a naive "one call per request" limit.
+const CHAT_RATE_LIMIT = 20;
+const CHAT_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: Request): Promise<NextResponse<ChatResponse>> {
+  const { allowed, retryAfterSeconds } = checkRateLimit(
+    clientIpFrom(request),
+    CHAT_RATE_LIMIT,
+    CHAT_RATE_WINDOW_MS,
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        message: "CORDY needs a quick breather — try again in a minute!",
+        suggestions: [],
+        confidence: 0,
+        done: false,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
   let body: ChatRequest;
   try {
     body = (await request.json()) as ChatRequest;
