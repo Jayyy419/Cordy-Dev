@@ -90,6 +90,31 @@ export default function SurveyPage() {
     setList(list.includes(opt) ? list.filter((o) => o !== opt) : [...list, opt]);
   }
 
+  function clearAll() {
+    setOverallRating(null);
+    setVsBrowsing(null);
+    setWouldUseForReal(null);
+    setQuestionsRelevant(null);
+    setMatchQuality(null);
+    setNps(null);
+    setLikedTags([]);
+    setDislikedTags([]);
+    setLikedMost("");
+    setWouldChange("");
+  }
+
+  const hasAnyAnswer =
+    overallRating !== null ||
+    vsBrowsing !== null ||
+    wouldUseForReal !== null ||
+    questionsRelevant !== null ||
+    matchQuality !== null ||
+    nps !== null ||
+    likedTags.length > 0 ||
+    dislikedTags.length > 0 ||
+    likedMost.trim() !== "" ||
+    wouldChange.trim() !== "";
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (
@@ -153,25 +178,36 @@ export default function SurveyPage() {
             onSubmit={handleSubmit}
             className="animate-bounce-in rounded-[32px] border-4 border-cordy-ink bg-white p-6 shadow-[0_30px_60px_rgba(22,33,62,0.22)] sm:rounded-[44px] sm:p-9"
           >
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-cordy-red bg-[#ffd28f]">
-                <Image src="/cordy-mascot.png" alt="CORDY" width={44} height={44} className="h-full w-full object-cover" />
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-cordy-red bg-[#ffd28f]">
+                  <Image src="/cordy-mascot.png" alt="CORDY" width={44} height={44} className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <h1 className="font-heading text-lg font-extrabold text-cordy-ink sm:text-xl">
+                    Quick survey
+                  </h1>
+                  <p className="text-xs text-cordy-ink/60">
+                    ~1 minute, totally optional — help us validate if this actually works.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="font-heading text-lg font-extrabold text-cordy-ink sm:text-xl">
-                  Quick survey
-                </h1>
-                <p className="text-xs text-cordy-ink/60">
-                  ~1 minute, totally optional — help us validate if this actually works.
-                </p>
-              </div>
+              {hasAnyAnswer && (
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="shrink-0 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+                >
+                  Clear choices
+                </button>
+              )}
             </div>
 
             {/* Q1: overall rating */}
-            <fieldset className="mt-7">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-7">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Overall, how was your experience with CORDY?
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Overall experience rating">
                 {OVERALL_OPTIONS.map((opt) => (
                   <button
@@ -187,13 +223,13 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q2: vs. browsing — THE core concept-validation question */}
-            <fieldset className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Compared to just browsing/searching for programmes yourself, was chatting with CORDY...
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Chatting vs. browsing comparison">
                 {VS_BROWSING_OPTIONS.map((opt) => (
                   <button
@@ -209,13 +245,13 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q3: would actually use for real — distinct from NPS advocacy */}
-            <fieldset className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Would you actually use something like this to find real programmes?
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Would use for real">
                 {WOULD_USE_OPTIONS.map((opt) => (
                   <button
@@ -231,13 +267,13 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q4: questions relevant */}
-            <fieldset className="mt-6">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Did CORDY&apos;s questions feel relevant to figuring out your interests?
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Question relevance">
                 {RELEVANT_OPTIONS.map((opt) => (
                   <button
@@ -253,13 +289,13 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q5: match quality */}
-            <fieldset className="mt-6">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Were the matched opportunities something you&apos;d actually consider?
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="Match quality">
                 {MATCH_OPTIONS.map((opt) => (
                   <button
@@ -275,13 +311,13 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q6: NPS */}
-            <fieldset className="mt-6">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 How likely are you to recommend this to a friend?
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Likelihood to recommend, 0 to 10">
                 {Array.from({ length: 11 }, (_, n) => n).map((n) => (
                   <button
@@ -301,14 +337,14 @@ export default function SurveyPage() {
                 <span>Not likely</span>
                 <span>Very likely</span>
               </div>
-            </fieldset>
+            </div>
 
             {/* Q7: what stood out as good */}
-            <fieldset className="mt-6">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 What stood out as <span className="text-cordy-teal">good</span>?{" "}
                 <span className="font-normal text-cordy-ink/50">(pick any)</span>
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="What stood out as good">
                 {LIKED_OPTIONS.map((opt) => (
                   <button
@@ -324,14 +360,14 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q8: what stood out as bad */}
-            <fieldset className="mt-6">
-              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+            <div className="mt-6">
+              <p className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 What stood out as <span className="text-cordy-red">bad</span>, or what would you change?{" "}
                 <span className="font-normal text-cordy-ink/50">(pick any)</span>
-              </legend>
+              </p>
               <div className="flex flex-wrap gap-2" role="group" aria-label="What stood out as bad">
                 {DISLIKED_OPTIONS.map((opt) => (
                   <button
@@ -347,14 +383,14 @@ export default function SurveyPage() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </div>
 
             {/* Q9: free text — liked most / would change */}
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <fieldset>
-                <legend className="font-heading mb-2 text-sm font-bold text-cordy-ink">
+              <div>
+                <p className="font-heading mb-2 text-sm font-bold text-cordy-ink">
                   ONE thing you liked most? <span className="font-normal text-cordy-ink/50">(optional)</span>
-                </legend>
+                </p>
                 <textarea
                   value={likedMost}
                   onChange={(e) => setLikedMost(e.target.value)}
@@ -362,11 +398,11 @@ export default function SurveyPage() {
                   placeholder="Type here..."
                   className="w-full rounded-2xl border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
                 />
-              </fieldset>
-              <fieldset>
-                <legend className="font-heading mb-2 text-sm font-bold text-cordy-ink">
+              </div>
+              <div>
+                <p className="font-heading mb-2 text-sm font-bold text-cordy-ink">
                   ONE thing you&apos;d change? <span className="font-normal text-cordy-ink/50">(optional)</span>
-                </legend>
+                </p>
                 <textarea
                   value={wouldChange}
                   onChange={(e) => setWouldChange(e.target.value)}
@@ -374,7 +410,7 @@ export default function SurveyPage() {
                   placeholder="Type here..."
                   className="w-full rounded-2xl border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
                 />
-              </fieldset>
+              </div>
             </div>
 
             <button
