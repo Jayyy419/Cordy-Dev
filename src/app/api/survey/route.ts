@@ -2,19 +2,36 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
 import { ensureSessionCookie, readSessionId } from "~/lib/session";
-import type { SurveyResponse } from "~/lib/surveySim";
+import type { SurveyAnswers } from "~/lib/survey/types";
 
-// Generous but real limit — this endpoint is a one-shot submit per user,
-// not a chat loop, but still shouldn't be spammable.
+// ── Generic survey-submission endpoint ───────────────────────────────────
+// Deliberately has no CORDY-specific field names in it — the request body
+// carries `meta` + `answers`, both plain key/value objects, and every key
+// becomes an Airtable field name it's written to as-is. To reuse this for
+// a different survey (a different product, a different question set),
+// nothing here needs to change — just point AIRTABLE_BASE_ID/
+// AIRTABLE_TABLE_ID at a different base/table whose columns match your new
+// question ids, same as SurveyModuleConfig.questions[].id does on the
+// client (see src/components/SurveyForm.tsx).
+
 const SURVEY_RATE_LIMIT = 10;
 const SURVEY_RATE_WINDOW_MS = 5 * 60 * 1000;
+
+interface SurveySubmitBody {
+  meta?: Record<string, string>;
+  answers: SurveyAnswers;
+}
 
 interface SurveyApiResponse {
   ok: boolean;
   message?: string;
 }
 
-function respond(request: Request, body: SurveyApiResponse, init?: ResponseInit): NextResponse<SurveyApiResponse> {
+function respond(
+  request: Request,
+  body: SurveyApiResponse,
+  init?: ResponseInit,
+): NextResponse<SurveyApiResponse> {
   const res = NextResponse.json(body, init);
   ensureSessionCookie(request, res);
   return res;
@@ -35,20 +52,29 @@ export async function POST(request: Request): Promise<NextResponse<SurveyApiResp
     );
   }
 
-  let body: Omit<SurveyResponse, "submittedAt">;
+  let body: SurveySubmitBody;
   try {
-    body = (await request.json()) as Omit<SurveyResponse, "submittedAt">;
+    body = (await request.json()) as SurveySubmitBody;
   } catch {
     return respond(request, { ok: false, message: "Invalid request body" }, { status: 400 });
   }
 
-  const record: SurveyResponse = { ...body, submittedAt: new Date().toISOString() };
+  if (!body.answers || typeof body.answers !== "object") {
+    return respond(request, { ok: false, message: "Missing answers" }, { status: 400 });
+  }
+
+  // Airtable's Long text fields want a plain string, not an array — join
+  // any multi-choice answers before sending.
+  const flatAnswers: Record<string, string | number | null> = {};
+  for (const [key, value] of Object.entries(body.answers)) {
+    flatAnswers[key] = Array.isArray(value) ? value.join(", ") : value;
+  }
+
+  const fields = { ...body.meta, ...flatAnswers, submittedAt: new Date().toISOString() };
 
   const airtableConfigured = env.AIRTABLE_PAT && env.AIRTABLE_BASE_ID && env.AIRTABLE_TABLE_ID;
   if (!airtableConfigured) {
-    // No Airtable configured — log server-side so it's at least visible in
-    // deployment logs during local/dev testing.
-    console.log("[survey/route] Airtable not configured, response logged only:", record);
+    console.log("[survey/route] Airtable not configured, response logged only:", fields);
     return respond(request, { ok: true });
   }
 
@@ -61,26 +87,7 @@ export async function POST(request: Request): Promise<NextResponse<SurveyApiResp
           Authorization: `Bearer ${env.AIRTABLE_PAT}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          records: [
-            {
-              fields: {
-                profileId: record.profileId,
-                overallRating: record.overallRating,
-                vsBrowsing: record.vsBrowsing,
-                wouldUseForReal: record.wouldUseForReal,
-                questionsRelevant: record.questionsRelevant,
-                matchQuality: record.matchQuality,
-                nps: record.nps,
-                likedTags: record.likedTags.join(", "),
-                dislikedTags: record.dislikedTags.join(", "),
-                likedMost: record.likedMost,
-                wouldChange: record.wouldChange,
-                submittedAt: record.submittedAt,
-              },
-            },
-          ],
-        }),
+        body: JSON.stringify({ records: [{ fields }], typecast: true }),
       },
     );
 
