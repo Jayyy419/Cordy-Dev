@@ -437,6 +437,27 @@ That's the whole integration surface. No part of `SurveyForm.tsx` or
 *New entries get added here as we build. Each one names the file(s),
 explains the "why," and calls out any new concept.*
 
+### 2026-07-16 — Cost reduction: prompt caching + fewer questions per conversation
+- **Files**: `src/app/api/chat/route.ts`, `src/app/api/opener/route.ts`
+  (`system` as an array with `cache_control`), `src/lib/prompts.ts`
+  (`MAX_QUESTIONS`)
+- **Concept**: **prompt caching** — Anthropic will cache a content block
+  marked with `cache_control: { type: "ephemeral" }` for ~5 minutes; a
+  request that repeats that exact block pays only 10% of normal input
+  price for it. `SYSTEM_PROMPT`/`OPENER_SYSTEM_PROMPT` are fixed constants,
+  byte-identical across *every* user's request — not just within one
+  person's conversation — so the cache is effectively shared across
+  concurrent users, not per-session. There's a minimum cacheable block size
+  (roughly 1024 tokens on Sonnet-class models), which is why the much
+  shorter rerank-call system prompt was deliberately left uncached — it's
+  too small for caching to apply at all.
+- **Why**: real per-request cost analysis (see conversation) showed the
+  system prompt was resent in full on every single Sonnet call — caching
+  it is a pure win (same output quality, lower cost) rather than a
+  quality/cost tradeoff. Cutting `MAX_QUESTIONS` from 4 to 3 is a real
+  tradeoff (slightly less-refined profile) traded for ~25% fewer total
+  model calls per completed conversation.
+
 ### 2026-07-16 — Survey module refactor (config-driven, reusable) + name/school fields
 - **Files**: `src/lib/survey/types.ts` (new), `src/components/SurveyForm.tsx`
   (new), `src/app/api/survey/route.ts` (rewritten generic), `src/app/survey/page.tsx`
