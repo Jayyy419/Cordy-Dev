@@ -124,7 +124,11 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      // SYSTEM_PROMPT is a fixed constant, identical across every request
+      // from every user — caching it means only the first request in a
+      // cache window pays full price; every other request (any user) within
+      // ~5 minutes hits the cache at 10% of the input cost for this block.
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: messagesWithContext,
     });
 

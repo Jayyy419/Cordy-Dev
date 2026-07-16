@@ -65,7 +65,8 @@ export async function POST(request: Request): Promise<NextResponse<OpenerRespons
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 160,
-      system: OPENER_SYSTEM_PROMPT,
+      // Fixed constant across every request — same cache benefit as chat/route.ts.
+      system: [{ type: "text", text: OPENER_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: `${situation}\n\n${retrievalBlock}` }],
     });
 

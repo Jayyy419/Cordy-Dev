@@ -11,7 +11,7 @@ import type { OpportunityFilters, ProfileData } from "./types";
 // instruction below and makes the final call on DONE.
 
 export const MIN_QUESTIONS = 2;
-export const MAX_QUESTIONS = 4;
+export const MAX_QUESTIONS = 3;
 export const CONFIDENCE_STOP = 75;
 
 // ── System prompt ─────────────────────────────────────────────────────────
