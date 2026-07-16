@@ -339,10 +339,144 @@ demonstrates:
 
 ---
 
+## Part 5 — Reusable modules built so far
+
+Most of this codebase is CORDY-specific and wouldn't transplant cleanly into
+another project. The **survey module** is a deliberate exception — it was
+built config-driven and backend-agnostic specifically so it can be dropped
+into a *different* project later with minimal changes. This section explains
+how it's put together and exactly what to do to reuse it.
+
+### 5.1 What "config-driven" means here
+
+Instead of a page full of hardcoded JSX for each question (which is what the
+survey looked like at first), the questions live as **data** — a plain
+TypeScript object — and one generic component reads that data and renders
+whatever form it describes:
+
+```ts
+// data: describes WHAT to ask
+const SURVEY_CONFIG: SurveyModuleConfig = {
+  id: "cordy-interest-profiler-v1",
+  title: "Quick survey",
+  questions: [
+    { id: "name", type: "text", label: "What's your name?", required: true },
+    { id: "nps", type: "scale", label: "How likely to recommend?", min: 0, max: 10 },
+    // ...
+  ],
+};
+
+// component: knows HOW to render any config that shape
+<SurveyForm config={SURVEY_CONFIG} onSubmit={handleSubmit} />
+```
+
+This is the same principle as a database schema vs. the rows in it: the
+*shape* (`SurveyModuleConfig`, defined once in `src/lib/survey/types.ts`) is
+fixed, but the *content* (which questions, in what order, with what options)
+varies freely without touching the rendering code at all. Adding, removing,
+or reordering a question is now a one-line change to an array — not a new
+block of JSX.
+
+### 5.2 Why the component doesn't use `bg-cordy-red` etc.
+
+Look inside `src/components/SurveyForm.tsx` and you won't find any of this
+project's `cordy-*` Tailwind theme classes. Colors are applied via inline
+`style={{ background: theme.primary }}` instead, where `theme` is a plain
+object with sensible defaults (`DEFAULT_SURVEY_THEME` in `types.ts`) that any
+config can override. This is what makes the file **copy-paste portable**: a
+different project's Tailwind config almost certainly doesn't define
+`cordy-red`, but every Tailwind project supports inline `style` — so the
+component works unmodified anywhere Tailwind's *layout* utilities
+(`flex`, `rounded-2xl`, `gap-2`, ...) are available, which is effectively
+universal.
+
+### 5.3 Why the API route has no CORDY-specific field names
+
+`src/app/api/survey/route.ts` takes a request body of exactly `{ meta,
+answers }` — two plain key/value objects — and forwards every key straight
+through to Airtable as a field name:
+
+```ts
+const fields = { ...body.meta, ...flatAnswers, submittedAt: new Date().toISOString() };
+```
+
+It never once mentions `overallRating` or `vsBrowsing` by name. The mapping
+between "what the survey asks" and "what column it lands in" is entirely
+defined by matching `SurveyQuestion.id` (in the config) to an Airtable field
+name (in the base) — not by anything hardcoded in the route. That's what
+makes the *backend* reusable too, not just the UI.
+
+### 5.4 Step-by-step: reusing this in a new project
+
+1. **Copy three files** into the new project: `src/lib/survey/types.ts`,
+   `src/components/SurveyForm.tsx`, and `src/app/api/survey/route.ts` (plus
+   its two dependencies, `src/lib/rateLimit.ts` and `src/lib/session.ts`, if
+   you want the same rate-limiting/cookie behavior — or strip that out if
+   the new project doesn't need it).
+2. **Write a new config** — a new `SurveyModuleConfig` object with that
+   project's own questions, copy, and (optionally) brand colors via `theme`.
+   This replaces `SURVEY_CONFIG` in `src/app/survey/page.tsx`.
+3. **Create a new Airtable base** with a table whose column names exactly
+   match your new config's question `id`s (case-sensitive), plus whatever
+   `meta` keys you plan to send (e.g. `profileId`).
+4. **Set three environment variables** in the new project's deployment:
+   `AIRTABLE_PAT`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_ID` — pointing at the
+   new base. Nothing in the code needs to change; the route reads these at
+   runtime.
+5. **Wire the submit handler** — a small page-level function like the one in
+   `survey/page.tsx` that calls `submitSurveyLocal` (offline-friendly local
+   cache) then `fetch("/api/survey", { method: "POST", body: JSON.stringify({ meta, answers }) })`.
+
+That's the whole integration surface. No part of `SurveyForm.tsx` or
+`route.ts` needs to be edited — only the config and the env vars change.
+
+---
+
 ## Build Log (newest first)
 
 *New entries get added here as we build. Each one names the file(s),
 explains the "why," and calls out any new concept.*
+
+### 2026-07-16 — Survey module refactor (config-driven, reusable) + name/school fields
+- **Files**: `src/lib/survey/types.ts` (new), `src/components/SurveyForm.tsx`
+  (new), `src/app/api/survey/route.ts` (rewritten generic), `src/app/survey/page.tsx`
+  (now just a config)
+- **Concept**: config-driven UI (data describes *what*, one component
+  handles *how*) — see Part 5 above for the full writeup and reuse steps.
+  Also: inline `style` props as a portability technique when a component
+  needs to work outside its original project's Tailwind theme.
+- **Why**: the original survey page was one big file of hardcoded JSX
+  specific to CORDY's exact questions. Splitting "what to ask" (config) from
+  "how to render a question" (component) means the same screen can serve a
+  different project's questions later with zero code changes — see Part 5.
+
+### 2026-07-16 — Real Airtable-backed survey storage (`/api/survey`)
+- **Files**: `src/app/api/survey/route.ts`, `src/env.js`
+  (`AIRTABLE_PAT`/`AIRTABLE_BASE_ID`/`AIRTABLE_TABLE_ID`)
+- **Concept**: a server-only integration with a third-party API (Airtable's
+  REST API) — the credential (`AIRTABLE_PAT`) lives only in an environment
+  variable, read server-side, never sent to or visible from the browser.
+  Graceful degradation: if the env vars aren't set, the route logs instead
+  of erroring, so the feature still "works" (just without persistence)
+  in an environment that hasn't been configured yet.
+- **Why**: survey responses were only ever saved to each respondent's own
+  `localStorage` — invisible to anyone but them. A real destination was
+  needed for the results to actually be reviewable.
+
+### 2026-07-16 — Concept-validation survey + fluid progress bar
+- **Files**: `src/app/survey/page.tsx` (original version), `src/lib/surveySim.ts`,
+  `src/app/chat/page.tsx` (`requestAnimationFrame` easing loop)
+- **Concept**: designing survey questions that measure something specific
+  (`vsBrowsing`: does chatting beat the status quo? vs. a generic 1-5
+  satisfaction score) instead of vanity metrics; `requestAnimationFrame` for
+  continuous, frame-by-frame UI animation as an alternative to CSS
+  transitions when you need the *target* itself to keep moving (a
+  "creeping" progress bar) rather than a single instant-to-instant jump.
+- **Why**: the first survey draft only asked "how was it, 1-5" — that
+  doesn't tell you whether the underlying idea (chat-based profiling) is
+  actually better than what already exists. Separately, the confidence bar
+  was snapping straight from one value to the next with nothing in between,
+  reading as buggy rather than "thinking."
 
 ### 2026-07-13 — Session-cookie rate limiting
 - **Files**: `src/lib/session.ts`, `src/lib/rateLimit.ts` (`checkCombinedRateLimit`)
