@@ -94,7 +94,16 @@ export default function ProfilePage() {
   const hasMatches = profile.opportunities.length > 0;
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
+    <div className="flex min-h-dvh flex-col items-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
+      <div className="sticky top-0 z-20 mb-4 flex w-full max-w-[560px] justify-center pt-1 sm:mb-6">
+        <button
+          onClick={() => router.push("/survey")}
+          className="rounded-full border-2 border-cordy-ink bg-cordy-teal px-5 py-2.5 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+        >
+          📝 Take a short survey
+        </button>
+      </div>
+
       <div className="animate-bounce-in w-full max-w-[560px] rounded-[32px] border-4 border-cordy-ink bg-white p-6 text-center shadow-[0_30px_60px_rgba(22,33,62,0.22)] sm:rounded-[44px] sm:p-11">
         <div className="animate-mascot-bounce mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border-4 border-cordy-red bg-[#ffd28f] sm:mb-5 sm:h-24 sm:w-24">
           <Image
