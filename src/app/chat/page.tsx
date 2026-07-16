@@ -100,6 +100,7 @@ export default function ChatPage() {
   const [questionsAsked, setQuestionsAsked] = useState(resumeState?.questionsAsked ?? 0);
   const [effectiveMax] = useState(resumeState?.effectiveMax ?? MAX_QUESTIONS);
   const [confidence, setConfidence] = useState(0);
+  const [displayedProgress, setDisplayedProgress] = useState(0);
   const [done, setDone] = useState(false);
   const [mouthAnim, setMouthAnim] = useState<MouthAnim>(null);
   const [pendingProfile, setPendingProfile] = useState<ChatResponse["profile"] | null>(null);
@@ -129,6 +130,26 @@ export default function ChatPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Continuously eases the displayed progress bar toward a target instead of
+  // snapping between values on each response: while waiting on CORDY, the
+  // target creeps forward on its own (bounded so it never overtakes the real
+  // number by much) so the bar visibly moves instead of sitting frozen; once
+  // a real confidence lands, the target becomes that value and the same loop
+  // eases toward it smoothly.
+  useEffect(() => {
+    let raf: number;
+    const tick = () => {
+      setDisplayedProgress((prev) => {
+        const target = done ? 100 : busy ? Math.min(prev + 0.4, confidence + 12, 92) : confidence;
+        const next = prev + (target - prev) * 0.08;
+        return Math.abs(target - next) < 0.05 ? target : next;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [confidence, busy, done]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
@@ -319,9 +340,11 @@ export default function ChatPage() {
 
   const mouthAnimClass =
     mouthAnim === "chomp" ? "animate-mouth-chomp" : mouthAnim === "celebrate" ? "animate-mouth-celebrate" : "";
-  // Matches the original design: the bar tracks CORDY's own confidence, not
-  // just how many questions have been asked — the label states both.
-  const progressPct = done ? 100 : Math.max(0, Math.min(100, confidence));
+  // displayedProgress is a continuously-eased version of confidence (see the
+  // animation effect above) — it creeps forward while waiting on a response
+  // instead of sitting frozen and jumping, and eases smoothly toward the
+  // real value once one lands.
+  const progressPct = Math.round(Math.max(0, Math.min(100, displayedProgress)));
   const profileCount = profile.length;
 
   return (
@@ -404,12 +427,12 @@ export default function ChatPage() {
               className="h-2 min-w-[60px] flex-1 overflow-hidden rounded-full bg-cordy-cream"
             >
               <div
-                className="h-full rounded-full bg-cordy-red transition-all duration-500"
+                className="h-full rounded-full bg-cordy-red"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
             <span className="shrink-0 text-xs font-semibold whitespace-nowrap text-cordy-ink/60">
-              {done ? "All done!" : `Q${questionsAsked} · ${confidence}%`}
+              {done ? "All done!" : `Q${questionsAsked} · ${progressPct}%`}
               <span className="hidden sm:inline"> confident</span>
             </span>
           </div>

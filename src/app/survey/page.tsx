@@ -14,6 +14,18 @@ const OVERALL_OPTIONS = [
   { value: 5, label: "Amazing" },
 ];
 
+const VS_BROWSING_OPTIONS: { value: SurveyResponse["vsBrowsing"]; label: string }[] = [
+  { value: "worse", label: "Worse — I'd rather just browse/search" },
+  { value: "same", label: "About the same" },
+  { value: "better", label: "Better than browsing myself" },
+];
+
+const WOULD_USE_OPTIONS: { value: SurveyResponse["wouldUseForReal"]; label: string }[] = [
+  { value: "yes", label: "Yes, definitely" },
+  { value: "maybe", label: "Maybe" },
+  { value: "no", label: "No" },
+];
+
 const RELEVANT_OPTIONS: { value: SurveyResponse["questionsRelevant"]; label: string }[] = [
   { value: "yes", label: "Yes, mostly" },
   { value: "somewhat", label: "Somewhat" },
@@ -27,13 +39,24 @@ const MATCH_OPTIONS: { value: SurveyResponse["matchQuality"]; label: string }[] 
   { value: "no_matches_shown", label: "I didn't get any matches" },
 ];
 
-const OBSTACLE_OPTIONS = [
-  "Nothing, it was smooth",
+const LIKED_OPTIONS = [
+  "The chat conversation felt natural",
+  "I liked the visual design (mascot etc.)",
+  "It was fast",
+  "The questions made sense",
+  "The matches felt relevant",
+  "The voice input",
+  "Nothing really stood out",
+];
+
+const DISLIKED_OPTIONS = [
+  "The chat felt robotic/repetitive",
+  "Confusing questions",
   "Took too long",
-  "Questions felt confusing",
   "Didn't trust the matches",
-  "Technical issues / bugs",
-  "Other",
+  "Visual design / mobile issues",
+  "Technical bugs",
+  "Nothing, it was fine",
 ];
 
 type Section = "form" | "done";
@@ -43,33 +66,54 @@ export default function SurveyPage() {
   const [section, setSection] = useState<Section>("form");
 
   const [overallRating, setOverallRating] = useState<number | null>(null);
+  const [vsBrowsing, setVsBrowsing] = useState<SurveyResponse["vsBrowsing"] | null>(null);
+  const [wouldUseForReal, setWouldUseForReal] = useState<SurveyResponse["wouldUseForReal"] | null>(null);
   const [questionsRelevant, setQuestionsRelevant] = useState<SurveyResponse["questionsRelevant"] | null>(
     null,
   );
   const [matchQuality, setMatchQuality] = useState<SurveyResponse["matchQuality"] | null>(null);
   const [nps, setNps] = useState<number | null>(null);
-  const [obstacles, setObstacles] = useState<string[]>([]);
-  const [comments, setComments] = useState("");
+  const [likedTags, setLikedTags] = useState<string[]>([]);
+  const [dislikedTags, setDislikedTags] = useState<string[]>([]);
+  const [likedMost, setLikedMost] = useState("");
+  const [wouldChange, setWouldChange] = useState("");
 
-  const canSubmit = overallRating !== null && questionsRelevant !== null && matchQuality !== null && nps !== null;
+  const canSubmit =
+    overallRating !== null &&
+    vsBrowsing !== null &&
+    wouldUseForReal !== null &&
+    questionsRelevant !== null &&
+    matchQuality !== null &&
+    nps !== null;
 
-  function toggleObstacle(opt: string) {
-    setObstacles((prev) => (prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]));
+  function toggleTag(list: string[], setList: (v: string[]) => void, opt: string) {
+    setList(list.includes(opt) ? list.filter((o) => o !== opt) : [...list, opt]);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || overallRating === null || questionsRelevant === null || matchQuality === null || nps === null) {
+    if (
+      overallRating === null ||
+      vsBrowsing === null ||
+      wouldUseForReal === null ||
+      questionsRelevant === null ||
+      matchQuality === null ||
+      nps === null
+    ) {
       return;
     }
     submitSurvey({
       profileId: getOrCreateProfileId(),
       overallRating,
+      vsBrowsing,
+      wouldUseForReal,
       questionsRelevant,
       matchQuality,
       nps,
-      obstacles,
-      comments: comments.trim(),
+      likedTags,
+      dislikedTags,
+      likedMost: likedMost.trim(),
+      wouldChange: wouldChange.trim(),
     });
     setSection("done");
   }
@@ -145,7 +189,51 @@ export default function SurveyPage() {
               </div>
             </fieldset>
 
-            {/* Q2: questions relevant */}
+            {/* Q2: vs. browsing — THE core concept-validation question */}
+            <fieldset className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
+              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+                Compared to just browsing/searching for programmes yourself, was chatting with CORDY...
+              </legend>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Chatting vs. browsing comparison">
+                {VS_BROWSING_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={vsBrowsing === opt.value}
+                    onClick={() => setVsBrowsing(opt.value)}
+                    className={`rounded-2xl border-2 border-cordy-ink px-3.5 py-2 text-xs font-semibold shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:text-sm ${
+                      vsBrowsing === opt.value ? "bg-cordy-red text-white" : "bg-white text-cordy-ink"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            {/* Q3: would actually use for real — distinct from NPS advocacy */}
+            <fieldset className="mt-6 rounded-2xl border-2 border-cordy-red/30 bg-[#fff3f5] p-3.5 sm:p-4">
+              <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
+                Would you actually use something like this to find real programmes?
+              </legend>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Would use for real">
+                {WOULD_USE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={wouldUseForReal === opt.value}
+                    onClick={() => setWouldUseForReal(opt.value)}
+                    className={`rounded-2xl border-2 border-cordy-ink px-3.5 py-2 text-xs font-semibold shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:text-sm ${
+                      wouldUseForReal === opt.value ? "bg-cordy-red text-white" : "bg-white text-cordy-ink"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            {/* Q4: questions relevant */}
             <fieldset className="mt-6">
               <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Did CORDY&apos;s questions feel relevant to figuring out your interests?
@@ -167,7 +255,7 @@ export default function SurveyPage() {
               </div>
             </fieldset>
 
-            {/* Q3: match quality */}
+            {/* Q5: match quality */}
             <fieldset className="mt-6">
               <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 Were the matched opportunities something you&apos;d actually consider?
@@ -189,7 +277,7 @@ export default function SurveyPage() {
               </div>
             </fieldset>
 
-            {/* Q4: NPS */}
+            {/* Q6: NPS */}
             <fieldset className="mt-6">
               <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
                 How likely are you to recommend this to a friend?
@@ -215,20 +303,21 @@ export default function SurveyPage() {
               </div>
             </fieldset>
 
-            {/* Q5: obstacles */}
+            {/* Q7: what stood out as good */}
             <fieldset className="mt-6">
               <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
-                What almost stopped you from finishing? <span className="font-normal text-cordy-ink/50">(pick any)</span>
+                What stood out as <span className="text-cordy-teal">good</span>?{" "}
+                <span className="font-normal text-cordy-ink/50">(pick any)</span>
               </legend>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Obstacles">
-                {OBSTACLE_OPTIONS.map((opt) => (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="What stood out as good">
+                {LIKED_OPTIONS.map((opt) => (
                   <button
                     key={opt}
                     type="button"
-                    aria-pressed={obstacles.includes(opt)}
-                    onClick={() => toggleObstacle(opt)}
+                    aria-pressed={likedTags.includes(opt)}
+                    onClick={() => toggleTag(likedTags, setLikedTags, opt)}
                     className={`rounded-2xl border-2 border-cordy-ink px-3.5 py-2 text-xs font-semibold shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 ${
-                      obstacles.includes(opt) ? "bg-cordy-blue-tag text-cordy-ink" : "bg-white text-cordy-ink"
+                      likedTags.includes(opt) ? "bg-cordy-teal text-cordy-ink" : "bg-white text-cordy-ink"
                     }`}
                   >
                     {opt}
@@ -237,19 +326,56 @@ export default function SurveyPage() {
               </div>
             </fieldset>
 
-            {/* Q6: free text */}
+            {/* Q8: what stood out as bad */}
             <fieldset className="mt-6">
               <legend className="font-heading mb-2.5 text-sm font-bold text-cordy-ink">
-                Anything else you want to tell us? <span className="font-normal text-cordy-ink/50">(optional)</span>
+                What stood out as <span className="text-cordy-red">bad</span>, or what would you change?{" "}
+                <span className="font-normal text-cordy-ink/50">(pick any)</span>
               </legend>
-              <textarea
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                rows={3}
-                placeholder="Type here..."
-                className="w-full rounded-2xl border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
-              />
+              <div className="flex flex-wrap gap-2" role="group" aria-label="What stood out as bad">
+                {DISLIKED_OPTIONS.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    aria-pressed={dislikedTags.includes(opt)}
+                    onClick={() => toggleTag(dislikedTags, setDislikedTags, opt)}
+                    className={`rounded-2xl border-2 border-cordy-ink px-3.5 py-2 text-xs font-semibold shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 ${
+                      dislikedTags.includes(opt) ? "bg-cordy-blue-tag text-cordy-ink" : "bg-white text-cordy-ink"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
             </fieldset>
+
+            {/* Q9: free text — liked most / would change */}
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <fieldset>
+                <legend className="font-heading mb-2 text-sm font-bold text-cordy-ink">
+                  ONE thing you liked most? <span className="font-normal text-cordy-ink/50">(optional)</span>
+                </legend>
+                <textarea
+                  value={likedMost}
+                  onChange={(e) => setLikedMost(e.target.value)}
+                  rows={3}
+                  placeholder="Type here..."
+                  className="w-full rounded-2xl border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
+                />
+              </fieldset>
+              <fieldset>
+                <legend className="font-heading mb-2 text-sm font-bold text-cordy-ink">
+                  ONE thing you&apos;d change? <span className="font-normal text-cordy-ink/50">(optional)</span>
+                </legend>
+                <textarea
+                  value={wouldChange}
+                  onChange={(e) => setWouldChange(e.target.value)}
+                  rows={3}
+                  placeholder="Type here..."
+                  className="w-full rounded-2xl border-2 border-cordy-cream bg-cordy-cream px-3.5 py-2.5 text-sm text-cordy-ink placeholder-cordy-ink/40 outline-none focus:border-cordy-teal"
+                />
+              </fieldset>
+            </div>
 
             <button
               type="submit"
