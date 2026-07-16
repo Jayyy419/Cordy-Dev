@@ -10,6 +10,11 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "test", "production"]),
     ANTHROPIC_API_KEY: z.string().min(1),
     CORDY_API_URL: z.string().url().optional(),
+    // Optional — when all three are set, /api/survey writes responses to
+    // this Airtable table. When unset, it just logs server-side (dev mode).
+    AIRTABLE_PAT: z.string().min(1).optional(),
+    AIRTABLE_BASE_ID: z.string().min(1).optional(),
+    AIRTABLE_TABLE_ID: z.string().min(1).optional(),
   },
 
   /**
@@ -29,6 +34,9 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     CORDY_API_URL: process.env.CORDY_API_URL,
+    AIRTABLE_PAT: process.env.AIRTABLE_PAT,
+    AIRTABLE_BASE_ID: process.env.AIRTABLE_BASE_ID,
+    AIRTABLE_TABLE_ID: process.env.AIRTABLE_TABLE_ID,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

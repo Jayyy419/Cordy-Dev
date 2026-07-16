@@ -64,6 +64,7 @@ type Section = "form" | "done";
 export default function SurveyPage() {
   const router = useRouter();
   const [section, setSection] = useState<Section>("form");
+  const [submitting, setSubmitting] = useState(false);
 
   const [overallRating, setOverallRating] = useState<number | null>(null);
   const [vsBrowsing, setVsBrowsing] = useState<SurveyResponse["vsBrowsing"] | null>(null);
@@ -115,7 +116,7 @@ export default function SurveyPage() {
     likedMost.trim() !== "" ||
     wouldChange.trim() !== "";
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (
       overallRating === null ||
@@ -123,11 +124,13 @@ export default function SurveyPage() {
       wouldUseForReal === null ||
       questionsRelevant === null ||
       matchQuality === null ||
-      nps === null
+      nps === null ||
+      submitting
     ) {
       return;
     }
-    submitSurvey({
+
+    const payload = {
       profileId: getOrCreateProfileId(),
       overallRating,
       vsBrowsing,
@@ -139,7 +142,23 @@ export default function SurveyPage() {
       dislikedTags,
       likedMost: likedMost.trim(),
       wouldChange: wouldChange.trim(),
-    });
+    };
+
+    setSubmitting(true);
+    // Local copy first (works even if the network request fails), then the
+    // real server-side write (Airtable when configured — see
+    // src/app/api/survey/route.ts).
+    submitSurvey(payload);
+    try {
+      await fetch("/api/survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error("[survey] failed to reach /api/survey, response is still saved locally:", err);
+    }
+    setSubmitting(false);
     setSection("done");
   }
 
@@ -415,10 +434,10 @@ export default function SurveyPage() {
 
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || submitting}
               className="mt-7 w-full rounded-2xl border-2 border-cordy-ink bg-cordy-red py-3.5 font-heading text-sm font-bold text-white shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 disabled:opacity-40"
             >
-              Submit feedback
+              {submitting ? "Submitting…" : "Submit feedback"}
             </button>
           </form>
         )}
