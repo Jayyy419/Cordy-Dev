@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { env } from "~/env";
+import { LIMITS } from "~/lib/apiLimits";
 import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
 import { ensureSessionCookie, readSessionId } from "~/lib/session";
 import type { SurveyAnswers } from "~/lib/survey/types";
@@ -59,22 +60,48 @@ export async function POST(request: Request): Promise<NextResponse<SurveyApiResp
     return respond(request, { ok: false, message: "Invalid request body" }, { status: 400 });
   }
 
-  if (!body.answers || typeof body.answers !== "object") {
+  if (!body.answers || typeof body.answers !== "object" || Array.isArray(body.answers)) {
     return respond(request, { ok: false, message: "Missing answers" }, { status: 400 });
   }
 
-  // Airtable's Long text fields want a plain string, not an array — join
-  // any multi-choice answers before sending.
-  const flatAnswers: Record<string, string | number | null> = {};
-  for (const [key, value] of Object.entries(body.answers)) {
-    flatAnswers[key] = Array.isArray(value) ? value.join(", ") : value;
+  // Sanitize before forwarding to Airtable: cap the number of fields, drop
+  // anything that isn't a string/number/null (so arrays get joined and
+  // objects/functions can't slip through), and truncate long values. This
+  // bounds both storage abuse and cost, and prevents `meta` from being used
+  // to spam arbitrary huge fields into a DB holding minors' data. Note:
+  // Airtable rejects unknown field NAMES (422) rather than creating them,
+  // and the table is text/number only (no select fields), so `typecast`
+  // can only coerce values, not pollute the schema — but we still cap
+  // aggressively as defense in depth.
+  const rawEntries = [...Object.entries(body.meta ?? {}), ...Object.entries(body.answers)];
+  const fields: Record<string, string | number> = {};
+  let fieldCount = 0;
+  for (const [key, value] of rawEntries) {
+    if (fieldCount >= LIMITS.MAX_SURVEY_FIELDS) break;
+    if (typeof key !== "string" || key.length === 0 || key.length > 200) continue;
+    let out: string | number;
+    if (Array.isArray(value)) {
+      out = value.filter((v) => typeof v === "string").join(", ");
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      out = value;
+    } else if (typeof value === "string") {
+      out = value;
+    } else {
+      continue; // drop booleans, objects, null, undefined
+    }
+    if (typeof out === "string" && out.length > LIMITS.MAX_SURVEY_VALUE_CHARS) {
+      out = out.slice(0, LIMITS.MAX_SURVEY_VALUE_CHARS);
+    }
+    fields[key] = out;
+    fieldCount++;
   }
-
-  const fields = { ...body.meta, ...flatAnswers, submittedAt: new Date().toISOString() };
+  // submittedAt is set server-side and always wins over any client-sent copy.
+  fields.submittedAt = new Date().toISOString();
 
   const airtableConfigured = env.AIRTABLE_PAT && env.AIRTABLE_BASE_ID && env.AIRTABLE_TABLE_ID;
   if (!airtableConfigured) {
-    console.log("[survey/route] Airtable not configured, response logged only:", fields);
+    // Do NOT log field contents — they can include minors' name/school/answers.
+    console.log("[survey/route] Airtable not configured; response accepted but not persisted.");
     return respond(request, { ok: true });
   }
 
@@ -92,8 +119,8 @@ export async function POST(request: Request): Promise<NextResponse<SurveyApiResp
     );
 
     if (!airtableRes.ok) {
-      const errText = await airtableRes.text();
-      console.error("[survey/route] Airtable write failed:", airtableRes.status, errText);
+      // Log only the status, not the response body (which can echo submitted values).
+      console.error("[survey/route] Airtable write failed with status", airtableRes.status);
       return respond(request, { ok: false, message: "Failed to save response" }, { status: 502 });
     }
   } catch (err) {

@@ -5,10 +5,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+const MAX_TITLE_CHARS = 120;
+const MAX_DESC_CHARS = 400;
+
 function InviteView() {
   const searchParams = useSearchParams();
-  const title = searchParams.get("title");
-  const desc = searchParams.get("desc");
+  const title = searchParams.get("title")?.slice(0, MAX_TITLE_CHARS) ?? null;
+  const desc = searchParams.get("desc")?.slice(0, MAX_DESC_CHARS) ?? null;
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">

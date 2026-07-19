@@ -72,18 +72,20 @@ describe("checkCombinedRateLimit", () => {
 });
 
 describe("clientIpFrom", () => {
-  it("reads the first address from x-forwarded-for", () => {
+  it("prefers the trusted x-real-ip header over x-forwarded-for", () => {
     const request = new Request("http://localhost/", {
-      headers: { "x-forwarded-for": "203.0.113.5, 10.0.0.1" },
-    });
-    expect(clientIpFrom(request)).toBe("203.0.113.5");
-  });
-
-  it("falls back to x-real-ip when x-forwarded-for is absent", () => {
-    const request = new Request("http://localhost/", {
-      headers: { "x-real-ip": "203.0.113.9" },
+      headers: { "x-real-ip": "203.0.113.9", "x-forwarded-for": "1.2.3.4, 203.0.113.9" },
     });
     expect(clientIpFrom(request)).toBe("203.0.113.9");
+  });
+
+  it("uses the RIGHT-most x-forwarded-for hop (not the spoofable left-most) when x-real-ip is absent", () => {
+    const request = new Request("http://localhost/", {
+      headers: { "x-forwarded-for": "6.6.6.6, 10.0.0.1, 203.0.113.5" },
+    });
+    // 6.6.6.6 is the client-supplied (spoofable) value; 203.0.113.5 is the
+    // trusted proxy-appended hop we should key on.
+    expect(clientIpFrom(request)).toBe("203.0.113.5");
   });
 
   it("falls back to 'unknown' when neither header is present", () => {

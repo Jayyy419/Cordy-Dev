@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
+import { LIMITS } from "~/lib/apiLimits";
 import { buildRetrievalBlockFromCandidates } from "~/lib/opportunities";
 import { OPENER_SYSTEM_PROMPT, OPENING_MESSAGE, parseOpener } from "~/lib/prompts";
 import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
@@ -53,7 +54,11 @@ export async function POST(request: Request): Promise<NextResponse<OpenerRespons
     body = { categories: [] };
   }
 
-  const categories = Array.isArray(body.categories) ? body.categories : [];
+  const categories = Array.isArray(body.categories)
+    ? body.categories
+        .filter((c): c is string => typeof c === "string" && c.length > 0 && c.length <= 100)
+        .slice(0, LIMITS.MAX_CATEGORIES)
+    : [];
   const filters = categories.length === 1 ? { category: categories[0] } : {};
   const candidates = await semanticRetrieve(anthropic, categories.join(", "), filters);
   const retrievalBlock = buildRetrievalBlockFromCandidates(candidates);
