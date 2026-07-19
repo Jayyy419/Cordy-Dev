@@ -14,7 +14,14 @@ export default function HomePage() {
             CORDY
           </span>
         </div>
-        <span className="rounded-full border-2 border-cordy-ink bg-cordy-teal px-3 py-1.5 text-xs font-bold whitespace-nowrap text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] sm:px-4 sm:text-sm">
+        {/* No real accounts/signup flow exists yet — a chip that looked
+            clickable but did nothing was a dead-end affordance, so it's
+            replaced with an invisible spacer (keeps the logo centered)
+            rather than left as fake decoration. */}
+        <span
+          aria-hidden
+          className="pointer-events-none invisible rounded-full border-2 px-3 py-1.5 text-xs font-bold whitespace-nowrap sm:px-4 sm:text-sm"
+        >
           SIGN UP
         </span>
       </header>

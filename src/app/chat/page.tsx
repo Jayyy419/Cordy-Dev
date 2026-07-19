@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "~/components/ChatBubble";
@@ -384,6 +385,12 @@ export default function ChatPage() {
     <main className="flex h-dvh flex-col items-center gap-3 overflow-hidden bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
       {/* Status row above the card */}
       <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Link
+          href="/"
+          className="shrink-0 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+        >
+          ← Home
+        </Link>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
           {profileCount > 0
             ? `🔍 CORDY's spotted ${profileCount} thing${profileCount === 1 ? "" : "s"} about you so far`
@@ -465,8 +472,8 @@ export default function ChatPage() {
               />
             </div>
             <span className="shrink-0 text-xs font-semibold whitespace-nowrap text-cordy-ink/60">
-              {done ? "All done!" : `Q${questionsAsked} · ${progressPct}%`}
-              <span className="hidden sm:inline"> confident</span>
+              {done ? "All done!" : `Question ${questionsAsked} · ${progressPct}% match`}
+              <span className="hidden sm:inline"> confidence</span>
             </span>
           </div>
 

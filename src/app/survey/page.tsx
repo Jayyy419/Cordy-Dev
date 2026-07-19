@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SurveyForm } from "~/components/SurveyForm";
 import { getOrCreateProfileId } from "~/lib/backendProfileSim";
@@ -161,6 +162,14 @@ export default function SurveyPage() {
       className="min-h-dvh px-4 py-8 sm:px-6 sm:py-12"
       style={{ background: "linear-gradient(180deg, #FFF6E4 0%, #FBEED4 100%)" }}
     >
+      <div className="mx-auto mb-4 w-full max-w-2xl">
+        <Link
+          href="/profile"
+          className="text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+        >
+          ← Back to profile
+        </Link>
+      </div>
       <SurveyForm
         config={SURVEY_CONFIG}
         onSubmit={handleSubmit}
