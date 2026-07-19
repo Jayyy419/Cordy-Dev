@@ -236,6 +236,11 @@ function ageRangesOverlap(
 }
 
 export function scoreOpportunity(opp: Opportunity, filters: OpportunityFilters): number {
+  // Age range is a hard gate, not just a scoring penalty — a strong
+  // category/sub-tag match must never surface something outside the young
+  // person's actual age range.
+  if (!ageRangesOverlap(opp, filters)) return -Infinity;
+
   let score = 0;
 
   if (filters.category && opp.category === filters.category) score += 4;
@@ -248,8 +253,6 @@ export function scoreOpportunity(opp: Opportunity, filters: OpportunityFilters):
   if (filters.format && opp.format && filters.format === opp.format) score += 1.5;
   if (filters.groupSize && opp.groupSize && filters.groupSize === opp.groupSize) score += 1.5;
   if (filters.skillLevel && opp.skillLevel && filters.skillLevel === opp.skillLevel) score += 1.5;
-
-  if (!ageRangesOverlap(opp, filters)) score -= 5;
 
   return score;
 }

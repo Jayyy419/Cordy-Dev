@@ -20,8 +20,6 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
   doneTitle: "Thanks so much! 🙏",
   doneMessage: "Your feedback genuinely helps us figure out if this is worth building for real.",
   questions: [
-    { id: "name", type: "text", label: "What's your name?", required: true, placeholder: "Type here..." },
-    { id: "school", type: "text", label: "What school are you at?", required: true, placeholder: "Type here..." },
     {
       id: "overallRating",
       type: "choice",
@@ -134,6 +132,8 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
       multiline: true,
       placeholder: "Type here...",
     },
+    { id: "name", type: "text", label: "What's your name?", required: true, placeholder: "Type here..." },
+    { id: "school", type: "text", label: "What school are you at?", required: true, placeholder: "Type here..." },
   ],
 };
 
@@ -146,14 +146,13 @@ export default function SurveyPage() {
     // real server-side write (Airtable when configured — see
     // src/app/api/survey/route.ts).
     submitSurveyLocal(SURVEY_CONFIG.id, meta, answers);
-    try {
-      await fetch("/api/survey", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meta, answers }),
-      });
-    } catch (err) {
-      console.error("[survey] failed to reach /api/survey, response is still saved locally:", err);
+    const res = await fetch("/api/survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meta, answers }),
+    });
+    if (!res.ok) {
+      throw new Error(`/api/survey responded ${res.status}`);
     }
   }
 
