@@ -59,6 +59,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
         suggestions: [],
         confidence: 0,
         done: false,
+        tags: [],
       },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
     );
@@ -70,7 +71,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   } catch {
     return respond(
       request,
-      { message: "Invalid request body", suggestions: [], confidence: 0, done: false },
+      { message: "Invalid request body", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 400 },
     );
   }
@@ -79,7 +80,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   if (!messages) {
     return respond(
       request,
-      { message: "Invalid or oversized messages array", suggestions: [], confidence: 0, done: false },
+      { message: "Invalid or oversized messages array", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 400 },
     );
   }
@@ -144,7 +145,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     console.error("[chat/route] Claude API error:", err);
     return respond(
       request,
-      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false },
+      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 502 },
     );
   }
@@ -158,6 +159,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
       suggestions: parsed.suggestions,
       confidence: computedConfidence,
       done: false,
+      tags: parsed.interests,
     });
   }
 
@@ -177,6 +179,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     confidence: Math.max(computedConfidence, confidenceFromFilters(profileData.filters ?? {})),
     done: true,
     profile: profileData,
+    tags: profileData.tags,
   });
 }
 

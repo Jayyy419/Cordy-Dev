@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "~/components/ChatBubble";
+import { InterestTag } from "~/components/InterestTag";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
 import { buildPartialProfile, getOrCreateProfileId, persistBackendProfile } from "~/lib/backendProfileSim";
@@ -248,10 +249,10 @@ export default function ChatPage() {
       setConfidence((prev) => Math.max(prev, data.confidence));
 
       const nextQuestionsAsked = data.profile ? questionsAsked : questionsAsked + 1;
-      const nextTags = data.profile?.tags ?? profile;
+      const nextTags = data.tags.length ? data.tags : profile;
+      setProfile(nextTags);
 
       if (data.profile) {
-        setProfile(data.profile.tags);
         setPendingProfile(data.profile);
         setDone(true);
         setSuggestions([]);
@@ -403,6 +404,15 @@ export default function ChatPage() {
           Skip for now →
         </button>
       </div>
+
+      {/* Live tag reveal — each new interest pops in as CORDY spots it */}
+      {profileCount > 0 && (
+        <div className="flex w-full max-w-[820px] flex-wrap gap-1.5">
+          {profile.map((tag) => (
+            <InterestTag key={tag} tag={tag} />
+          ))}
+        </div>
+      )}
 
       {/* CORDY card: mane + eyes + mouth-as-chat-window */}
       <div

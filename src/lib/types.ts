@@ -58,6 +58,8 @@ export interface ChatResponse {
   confidence: number;
   done: boolean;
   profile?: ProfileData;
+  /** Cumulative interest tags spotted so far this turn (even before DONE), for a live tag-reveal UI. */
+  tags: string[];
 }
 
 export interface OpenerRequest {
