@@ -12,15 +12,19 @@
 interface Bucket {
   count: number;
   windowStart: number;
+  windowMs: number;
 }
 
 const buckets = new Map<string, Bucket>();
 
 // Opportunistic cleanup so the Map doesn't grow unbounded between cold
-// starts on a long-lived instance.
-function pruneStale(now: number, windowMs: number): void {
+// starts on a long-lived instance. Prunes each bucket against ITS OWN
+// window, not the caller's — different routes use different windows, so
+// pruning chat's 5-min buckets with the survey route's window would reset
+// live counters (a limit-bypass exactly under load).
+function pruneStale(now: number): void {
   for (const [key, bucket] of buckets) {
-    if (now - bucket.windowStart > windowMs) buckets.delete(key);
+    if (now - bucket.windowStart > bucket.windowMs) buckets.delete(key);
   }
 }
 
@@ -35,11 +39,11 @@ export function checkRateLimit(
   windowMs: number,
 ): RateLimitResult {
   const now = Date.now();
-  if (buckets.size > 5000) pruneStale(now, windowMs);
+  if (buckets.size > 5000) pruneStale(now);
 
   const existing = buckets.get(key);
   if (!existing || now - existing.windowStart > windowMs) {
-    buckets.set(key, { count: 1, windowStart: now });
+    buckets.set(key, { count: 1, windowStart: now, windowMs });
     return { allowed: true, retryAfterSeconds: 0 };
   }
 
@@ -53,9 +57,23 @@ export function checkRateLimit(
 }
 
 export function clientIpFrom(request: Request): string {
+  // On Vercel, `x-real-ip` is set by the edge to the true connecting IP and
+  // cannot be overridden by the client, so it's the trustworthy key. The
+  // LEFT-most `x-forwarded-for` value is client-supplied and trivially
+  // spoofed (send a random IP per request → fresh rate-limit bucket every
+  // time), so we must NOT trust it. Fall back to the RIGHT-most XFF hop (the
+  // one appended by the trusted proxy nearest us) only when x-real-ip is
+  // absent (e.g. local dev), and to a single shared "unknown" bucket as a
+  // last resort so header-less clients are collectively limited, not exempt.
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
+  if (forwarded) {
+    const hops = forwarded.split(",").map((h) => h.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1]!;
+  }
+  return "unknown";
 }
 
 // ── Combined IP + session check ─────────────────────────────────────────

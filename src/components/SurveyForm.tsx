@@ -30,6 +30,7 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
   const [answers, setAnswers] = useState<SurveyAnswers>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const canSubmit = isSurveyComplete(config.questions, answers);
   const canClear = hasAnyAnswer(config.questions, answers);
@@ -52,9 +53,16 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
     e.preventDefault();
     if (!canSubmit || submitting) return;
     setSubmitting(true);
-    await onSubmit(answers);
-    setSubmitting(false);
-    setDone(true);
+    setError(null);
+    try {
+      await onSubmit(answers);
+      setDone(true);
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong submitting your answers — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const cardStyle: React.CSSProperties = {
@@ -121,7 +129,7 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
         )}
       </div>
 
-      {config.questions.map((q) => {
+      {config.questions.map((q, qIndex) => {
         const highlightStyle: React.CSSProperties | undefined = q.highlight
           ? { background: theme.highlightBg, border: `2px solid ${theme.primary}55`, borderRadius: 16, padding: 14 }
           : undefined;
@@ -140,6 +148,7 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
                   onChange={(e) => setAnswer(q.id, e.target.value)}
                   rows={3}
                   placeholder={q.placeholder}
+                  autoFocus={qIndex === 0}
                   className="w-full rounded-2xl px-3.5 py-2.5 text-sm outline-none"
                   style={{ background: theme.cream, border: `2px solid ${theme.cream}` }}
                 />
@@ -148,6 +157,7 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
                   value={typeof answers[q.id] === "string" ? (answers[q.id] as string) : ""}
                   onChange={(e) => setAnswer(q.id, e.target.value)}
                   placeholder={q.placeholder}
+                  autoFocus={qIndex === 0}
                   className="w-full rounded-2xl px-3.5 py-2.5 text-sm outline-none"
                   style={{ background: theme.cream, border: `2px solid ${theme.cream}` }}
                 />
@@ -238,6 +248,8 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
           </div>
         );
       })}
+
+      {error && <p className="mt-4 text-xs font-semibold text-red-600">{error}</p>}
 
       <button
         type="submit"

@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "~/components/ChatBubble";
+import { InterestTag } from "~/components/InterestTag";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
 import { buildPartialProfile, getOrCreateProfileId, persistBackendProfile } from "~/lib/backendProfileSim";
@@ -48,7 +50,6 @@ async function fetchJson<T>(url: string, body: unknown): Promise<T> {
 function readMcqCategories(): string[] {
   try {
     const raw = localStorage.getItem(MCQ_CATEGORIES_STORAGE_KEY);
-    localStorage.removeItem(MCQ_CATEGORIES_STORAGE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as string[];
   } catch {
@@ -67,9 +68,6 @@ function readResumeState(): ResumeState | null {
     const rawTranscript = localStorage.getItem(TRANSCRIPT_KEY);
     const rawQuestionsAsked = localStorage.getItem(QUESTIONS_ASKED_KEY);
     const rawMaxOverride = localStorage.getItem(MAX_OVERRIDE_KEY);
-    localStorage.removeItem(TRANSCRIPT_KEY);
-    localStorage.removeItem(QUESTIONS_ASKED_KEY);
-    localStorage.removeItem(MAX_OVERRIDE_KEY);
     if (!rawTranscript || !rawMaxOverride) return null;
 
     const stored = JSON.parse(rawTranscript) as { role: Message["role"]; content: string }[];
@@ -116,10 +114,18 @@ export default function ChatPage() {
   const startedRef = useRef(false);
   const profileId = useRef(typeof window === "undefined" ? "p_local" : getOrCreateProfileId());
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mouthAnimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
+    // Clear the one-shot resume/MCQ keys here (post-mount, StrictMode-safe)
+    // rather than inside the useState initializer, which double-invokes in
+    // dev and would wipe the keys before the second render could read them.
+    localStorage.removeItem(MCQ_CATEGORIES_STORAGE_KEY);
+    localStorage.removeItem(TRANSCRIPT_KEY);
+    localStorage.removeItem(QUESTIONS_ASKED_KEY);
+    localStorage.removeItem(MAX_OVERRIDE_KEY);
     if (resumeState) {
       setMessages((prev) => [
         ...prev,
@@ -137,15 +143,22 @@ export default function ChatPage() {
   // number by much) so the bar visibly moves instead of sitting frozen; once
   // a real confidence lands, the target becomes that value and the same loop
   // eases toward it smoothly.
+  const displayedProgressRef = useRef(0);
   useEffect(() => {
     let raf: number;
     const tick = () => {
-      setDisplayedProgress((prev) => {
-        const target = done ? 100 : busy ? Math.min(prev + 0.4, confidence + 12, 92) : confidence;
-        const next = prev + (target - prev) * 0.08;
-        return Math.abs(target - next) < 0.05 ? target : next;
-      });
-      raf = requestAnimationFrame(tick);
+      const prev = displayedProgressRef.current;
+      const target = done ? 100 : busy ? Math.min(prev + 0.4, confidence + 12, 92) : confidence;
+      const next = prev + (target - prev) * 0.08;
+      const settled = Math.abs(target - next) < 0.05;
+      const value = settled ? target : next;
+      displayedProgressRef.current = value;
+      setDisplayedProgress(value);
+      // Once settled and nothing is actively creeping (not busy), the target
+      // won't move again until confidence/busy/done change — which restarts
+      // this effect anyway — so stop scheduling frames instead of spinning
+      // requestAnimationFrame forever for no visible change.
+      if (!settled || busy) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -154,6 +167,21 @@ export default function ChatPage() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
+
+  // Recover a mid-conversation refresh: persist the transcript on every turn,
+  // not only when the user explicitly navigates away via skip/see-profile.
+  useEffect(() => {
+    if (messages.length === 0 || done) return;
+    persistTranscriptForResume(effectiveMax, messages, questionsAsked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, questionsAsked, done]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+      if (mouthAnimTimeoutRef.current) clearTimeout(mouthAnimTimeoutRef.current);
+    };
+  }, []);
 
   async function loadOpener() {
     setBusy(true);
@@ -184,19 +212,23 @@ export default function ChatPage() {
 
   function triggerMouthAnim(kind: MouthAnim, duration: number, cb?: () => void) {
     setMouthAnim(kind);
-    setTimeout(() => {
+    if (mouthAnimTimeoutRef.current) clearTimeout(mouthAnimTimeoutRef.current);
+    mouthAnimTimeoutRef.current = setTimeout(() => {
       setMouthAnim(null);
       cb?.();
     }, duration);
   }
 
-  async function sendMessage(content: string) {
-    if (!content.trim() || busy || done) return;
+  async function sendMessage(content: string, isRetry = false) {
+    if (busy || done) return;
+    if (!isRetry && !content.trim()) return;
     triggerMouthAnim("chomp", 420);
 
-    const userMessage = createMessage("user", content);
-    const history = [...messages, userMessage];
-    setMessages(history);
+    // A retry resends the transcript as-is — the failed user message is
+    // already in `messages` from the first attempt, so don't append it
+    // again (that would show the same user bubble twice).
+    const history = isRetry ? messages : [...messages, createMessage("user", content)];
+    if (!isRetry) setMessages(history);
     setInput("");
     setBusy(true);
     setSuggestions([]);
@@ -209,6 +241,7 @@ export default function ChatPage() {
       });
       const nextHistory = [...history, createMessage("assistant", data.message)];
       setMessages(nextHistory);
+      setLastFailedContent(null);
       // CORDY's own confidence estimate can honestly dip on a surprising or
       // broadening answer, but showing that as a visible regression reads as
       // a bug — display the high-water mark instead. Pacing on the server
@@ -216,10 +249,10 @@ export default function ChatPage() {
       setConfidence((prev) => Math.max(prev, data.confidence));
 
       const nextQuestionsAsked = data.profile ? questionsAsked : questionsAsked + 1;
-      const nextTags = data.profile?.tags ?? profile;
+      const nextTags = data.tags.length ? data.tags : profile;
+      setProfile(nextTags);
 
       if (data.profile) {
-        setProfile(data.profile.tags);
         setPendingProfile(data.profile);
         setDone(true);
         setSuggestions([]);
@@ -258,9 +291,7 @@ export default function ChatPage() {
 
   function handleSuggestionSelect(reply: string) {
     if (reply === "Retry" && lastFailedContent) {
-      const retryContent = lastFailedContent;
-      setLastFailedContent(null);
-      void sendMessage(retryContent);
+      void sendMessage(lastFailedContent, true);
       return;
     }
     void sendMessage(reply);
@@ -270,18 +301,22 @@ export default function ChatPage() {
     if (busy) return;
     const target = messages[index];
     if (target?.role !== "user") return;
-    setMessages(messages.slice(0, index));
+    const truncated = messages.slice(0, index);
+    setMessages(truncated);
     setInput(target.content);
     setDone(false);
-    setQuestionsAsked((n) => Math.max(1, n - 1));
+    // Recount from what's actually left, rather than blindly decrementing by
+    // one — editing an earlier answer can drop several turns at once. Each
+    // assistant reply so far (opener included) represents one question asked.
+    setQuestionsAsked(Math.max(1, truncated.filter((m) => m.role === "assistant").length));
   }
 
-  function persistTranscriptForResume(nextMax: number) {
+  function persistTranscriptForResume(nextMax: number, transcript: Message[], askedCount: number) {
     localStorage.setItem(
       TRANSCRIPT_KEY,
-      JSON.stringify(messages.map(({ role, content }) => ({ role, content }))),
+      JSON.stringify(transcript.map(({ role, content }) => ({ role, content }))),
     );
-    localStorage.setItem(QUESTIONS_ASKED_KEY, String(questionsAsked));
+    localStorage.setItem(QUESTIONS_ASKED_KEY, String(askedCount));
     localStorage.setItem(MAX_OVERRIDE_KEY, String(nextMax));
   }
 
@@ -291,7 +326,7 @@ export default function ChatPage() {
     const partial = buildPartialProfile(profile, Object.keys(filters).length ? filters : undefined);
     localStorage.setItem("cordy_profile", JSON.stringify(partial));
     // Let "keep chatting" from the results screen pick up exactly where this left off.
-    persistTranscriptForResume(effectiveMax + 3);
+    persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked);
     router.push("/profile");
   }
 
@@ -299,7 +334,7 @@ export default function ChatPage() {
     if (!pendingProfile) return;
     triggerMouthAnim("celebrate", 500, () => {
       localStorage.setItem("cordy_profile", JSON.stringify(pendingProfile));
-      persistTranscriptForResume(effectiveMax + 3);
+      persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked);
       router.push("/profile");
     });
   }
@@ -351,6 +386,12 @@ export default function ChatPage() {
     <main className="flex h-dvh flex-col items-center gap-3 overflow-hidden bg-cordy-cream px-3 py-4 sm:gap-4 sm:px-4 sm:py-8">
       {/* Status row above the card */}
       <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Link
+          href="/"
+          className="shrink-0 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+        >
+          ← Home
+        </Link>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
           {profileCount > 0
             ? `🔍 CORDY's spotted ${profileCount} thing${profileCount === 1 ? "" : "s"} about you so far`
@@ -363,6 +404,15 @@ export default function ChatPage() {
           Skip for now →
         </button>
       </div>
+
+      {/* Live tag reveal — each new interest pops in as CORDY spots it */}
+      {profileCount > 0 && (
+        <div className="flex w-full max-w-[820px] flex-wrap gap-1.5">
+          {profile.map((tag) => (
+            <InterestTag key={tag} tag={tag} />
+          ))}
+        </div>
+      )}
 
       {/* CORDY card: mane + eyes + mouth-as-chat-window */}
       <div
@@ -432,8 +482,8 @@ export default function ChatPage() {
               />
             </div>
             <span className="shrink-0 text-xs font-semibold whitespace-nowrap text-cordy-ink/60">
-              {done ? "All done!" : `Q${questionsAsked} · ${progressPct}%`}
-              <span className="hidden sm:inline"> confident</span>
+              {done ? "All done!" : `Question ${questionsAsked} · ${progressPct}% match`}
+              <span className="hidden sm:inline"> confidence</span>
             </span>
           </div>
 

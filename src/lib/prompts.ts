@@ -123,13 +123,16 @@ function parseFilters(raw: string | undefined): OpportunityFilters | undefined {
 export function parseReply(raw: string): ParsedReply {
   const text = (raw || "").trim();
 
-  const replyMatch = /REPLY:\s*([\s\S]*?)(?:\n(?:INTERESTS|SUGGESTIONS|DONE):|$)/i.exec(text);
-  const interestsMatch = /INTERESTS:\s*(.*)/i.exec(text);
-  const suggestionsMatch = /SUGGESTIONS:\s*(.*)/i.exec(text);
-  const doneMatch = /DONE:\s*(true|false)/i.exec(text);
-  const summaryMatch = /SUMMARY:\s*([\s\S]*?)(?:\n(?:FILTERS|QUERIES):|$)/i.exec(text);
-  const filtersMatch = /FILTERS:\s*(\{[\s\S]*?\})\s*(?:\n|$)/i.exec(text);
-  const queriesMatch = /QUERIES:\s*(.*)/i.exec(text);
+  // All labelled fields are anchored to the start of a line (^ + "m" flag)
+  // so a stray "DONE:"-looking substring inside the REPLY's own prose can't
+  // be mistaken for the real structured field.
+  const replyMatch = /^REPLY:\s*([\s\S]*?)(?:\n(?:INTERESTS|SUGGESTIONS|DONE):|$)/im.exec(text);
+  const interestsMatch = /^INTERESTS:\s*(.*)/im.exec(text);
+  const suggestionsMatch = /^SUGGESTIONS:\s*(.*)/im.exec(text);
+  const doneMatch = /^DONE:\s*(true|false)/im.exec(text);
+  const summaryMatch = /^SUMMARY:\s*([\s\S]*?)(?:\n(?:FILTERS|QUERIES):|$)/im.exec(text);
+  const filtersMatch = /^FILTERS:\s*(\{[\s\S]*?\})\s*(?:\n|$)/im.exec(text);
+  const queriesMatch = /^QUERIES:\s*(.*)/im.exec(text);
 
   const reply = replyMatch
     ? replyMatch[1]!.trim()

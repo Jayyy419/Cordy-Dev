@@ -8,6 +8,17 @@ import { estimatedRecentJoins } from "~/lib/opportunities";
 import type { Opportunity } from "~/lib/types";
 import { InterestTag } from "./InterestTag";
 
+/** Only allow http(s) URLs through to an href — blocks javascript:/data: XSS from a compromised or malformed catalog entry. */
+function safeHref(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface OpportunityCardProps {
   opportunity: Opportunity;
   /** Human-readable reasons this opportunity matched (see lib/opportunities.ts explainMatch) */
@@ -29,6 +40,7 @@ export function OpportunityCard({ opportunity, matchReasons, readOnly = false }:
 
   const recentJoins = estimatedRecentJoins(opportunity.id);
   const isTeam = opportunity.groupSize === "team";
+  const learnMoreHref = safeHref(opportunity.url);
 
   async function inviteAFriend() {
     const url = `${window.location.origin}/invite?title=${encodeURIComponent(
@@ -77,9 +89,9 @@ export function OpportunityCard({ opportunity, matchReasons, readOnly = false }:
       </p>
 
       <div className="flex flex-wrap gap-2">
-        {opportunity.url && (
+        {learnMoreHref && (
           <a
-            href={opportunity.url}
+            href={learnMoreHref}
             target="_blank"
             rel="noopener noreferrer"
             className="self-start rounded-full border-2 border-cordy-ink bg-cordy-teal px-4 py-1.5 text-xs font-bold text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"

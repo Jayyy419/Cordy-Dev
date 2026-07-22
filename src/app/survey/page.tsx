@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SurveyForm } from "~/components/SurveyForm";
 import { getOrCreateProfileId } from "~/lib/backendProfileSim";
@@ -20,8 +21,6 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
   doneTitle: "Thanks so much! 🙏",
   doneMessage: "Your feedback genuinely helps us figure out if this is worth building for real.",
   questions: [
-    { id: "name", type: "text", label: "What's your name?", required: true, placeholder: "Type here..." },
-    { id: "school", type: "text", label: "What school are you at?", required: true, placeholder: "Type here..." },
     {
       id: "overallRating",
       type: "choice",
@@ -134,6 +133,8 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
       multiline: true,
       placeholder: "Type here...",
     },
+    { id: "name", type: "text", label: "What's your name?", required: true, placeholder: "Type here..." },
+    { id: "school", type: "text", label: "What school are you at?", required: true, placeholder: "Type here..." },
   ],
 };
 
@@ -146,14 +147,13 @@ export default function SurveyPage() {
     // real server-side write (Airtable when configured — see
     // src/app/api/survey/route.ts).
     submitSurveyLocal(SURVEY_CONFIG.id, meta, answers);
-    try {
-      await fetch("/api/survey", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meta, answers }),
-      });
-    } catch (err) {
-      console.error("[survey] failed to reach /api/survey, response is still saved locally:", err);
+    const res = await fetch("/api/survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meta, answers }),
+    });
+    if (!res.ok) {
+      throw new Error(`/api/survey responded ${res.status}`);
     }
   }
 
@@ -162,6 +162,14 @@ export default function SurveyPage() {
       className="min-h-dvh px-4 py-8 sm:px-6 sm:py-12"
       style={{ background: "linear-gradient(180deg, #FFF6E4 0%, #FBEED4 100%)" }}
     >
+      <div className="mx-auto mb-4 w-full max-w-2xl">
+        <Link
+          href="/profile"
+          className="text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+        >
+          ← Back to profile
+        </Link>
+      </div>
       <SurveyForm
         config={SURVEY_CONFIG}
         onSubmit={handleSubmit}

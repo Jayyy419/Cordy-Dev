@@ -138,7 +138,7 @@ export default function ProfilePage() {
         </button>
 
         {hasMatches && (
-          <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
+          <div id="matched-opportunities" className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
             <h2 className="font-heading text-base font-bold text-cordy-ink">Matched for you</h2>
             <p className="mt-1 mb-3.5 text-xs text-cordy-ink/60">
               Sample matches from CORDY&apos;s opportunities list, based on what you shared.
@@ -203,7 +203,14 @@ export default function ProfilePage() {
         </div>
 
         <button
-          onClick={restart}
+          onClick={
+            hasMatches
+              ? () =>
+                  document
+                    .getElementById("matched-opportunities")
+                    ?.scrollIntoView({ behavior: "smooth" })
+              : restart
+          }
           className="mt-3.5 w-full rounded-2xl border-2 border-cordy-ink bg-cordy-red py-3 font-heading text-sm font-bold text-white shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
         >
           {hasMatches ? "See recommended opportunities" : "Start over"}

@@ -23,13 +23,18 @@ export function ChatBubble({ message, showAvatar = true, onEdit }: ChatBubblePro
       <div
         onClick={onEdit}
         title={editable ? "Click to edit this answer" : undefined}
-        className={`animate-bounce-in max-w-[88%] rounded-2xl border-2 border-cordy-ink px-3.5 py-2.5 text-sm leading-relaxed shadow-[3px_3px_0_0_var(--color-cordy-ink)] sm:max-w-[75%] sm:px-4 sm:py-3 ${
+        className={`animate-bounce-in group relative flex max-w-[88%] items-center gap-1.5 rounded-2xl border-2 border-cordy-ink px-3.5 py-2.5 text-sm leading-relaxed shadow-[3px_3px_0_0_var(--color-cordy-ink)] sm:max-w-[75%] sm:px-4 sm:py-3 ${
           isUser
             ? "rounded-br-sm bg-cordy-teal text-cordy-ink"
             : "rounded-bl-sm bg-white text-cordy-ink"
         } ${editable ? "cursor-pointer transition-opacity hover:opacity-80" : ""}`}
       >
-        {message.content}
+        <span>{message.content}</span>
+        {editable && (
+          <span aria-hidden className="shrink-0 text-xs opacity-50 group-hover:opacity-90">
+            ✏️
+          </span>
+        )}
       </div>
     </div>
   );

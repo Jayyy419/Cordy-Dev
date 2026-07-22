@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { env } from "~/env";
+import { clampMaxQuestions, toSafeInt, validateChatMessages } from "~/lib/apiLimits";
 import {
   buildRetrievalBlockFromCandidates,
   confidenceFromFilters,
@@ -58,6 +59,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
         suggestions: [],
         confidence: 0,
         done: false,
+        tags: [],
       },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
     );
@@ -69,19 +71,21 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   } catch {
     return respond(
       request,
-      { message: "Invalid request body", suggestions: [], confidence: 0, done: false },
+      { message: "Invalid request body", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 400 },
     );
   }
 
-  const { messages, questionsAsked, maxQuestions } = body;
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const messages = validateChatMessages(body.messages);
+  if (!messages) {
     return respond(
       request,
-      { message: "messages must be a non-empty array", suggestions: [], confidence: 0, done: false },
+      { message: "Invalid or oversized messages array", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 400 },
     );
   }
+  const questionsAsked = toSafeInt(body.questionsAsked, 0);
+  const maxQuestions = body.maxQuestions;
 
   // Ground this turn's question in the real catalog: infer a rough filter
   // set from everything said so far, then have a fast model semantically
@@ -102,7 +106,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   // Pacing is decided server-side within [MIN_QUESTIONS, effectiveMax].
   // effectiveMax is normally MAX_QUESTIONS, but the client may raise it when
   // the user opts to "keep chatting" after already seeing a results screen.
-  const effectiveMax = maxQuestions && maxQuestions > 0 ? maxQuestions : MAX_QUESTIONS;
+  const effectiveMax = clampMaxQuestions(maxQuestions, MAX_QUESTIONS);
   const forcedContinue = questionsAsked < MIN_QUESTIONS;
   const forcedFinal = questionsAsked >= effectiveMax;
   const pacingInstruction = forcedFinal
@@ -141,7 +145,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     console.error("[chat/route] Claude API error:", err);
     return respond(
       request,
-      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false },
+      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false, tags: [] },
       { status: 502 },
     );
   }
@@ -155,6 +159,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
       suggestions: parsed.suggestions,
       confidence: computedConfidence,
       done: false,
+      tags: parsed.interests,
     });
   }
 
@@ -174,6 +179,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     confidence: Math.max(computedConfidence, confidenceFromFilters(profileData.filters ?? {})),
     done: true,
     profile: profileData,
+    tags: profileData.tags,
   });
 }
 
