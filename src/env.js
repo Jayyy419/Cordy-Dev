@@ -15,6 +15,9 @@ export const env = createEnv({
     AIRTABLE_PAT: z.string().min(1).optional(),
     AIRTABLE_BASE_ID: z.string().min(1).optional(),
     AIRTABLE_TABLE_ID: z.string().min(1).optional(),
+    // Optional — the Funnel Events table. When set, /api/events records
+    // anonymous funnel steps so drop-off is measurable, not just completions.
+    AIRTABLE_EVENTS_TABLE_ID: z.string().min(1).optional(),
   },
 
   /**
@@ -37,6 +40,7 @@ export const env = createEnv({
     AIRTABLE_PAT: process.env.AIRTABLE_PAT,
     AIRTABLE_BASE_ID: process.env.AIRTABLE_BASE_ID,
     AIRTABLE_TABLE_ID: process.env.AIRTABLE_TABLE_ID,
+    AIRTABLE_EVENTS_TABLE_ID: process.env.AIRTABLE_EVENTS_TABLE_ID,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

@@ -6,12 +6,29 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { InterestTag } from "~/components/InterestTag";
 import { OpportunityCard } from "~/components/OpportunityCard";
+import { trackEvent } from "~/lib/analytics";
 import { copyToClipboard } from "~/lib/clipboard";
-import { explainMatch } from "~/lib/opportunities";
-import type { ProfileData } from "~/lib/types";
+import { browseByCategory, explainMatch, matchOpportunities } from "~/lib/opportunities";
+import { clearComparisonOutcome, updateComparisonOutcome } from "~/lib/studyContext";
+import type { Opportunity, OpportunityFilters, ProfileData } from "~/lib/types";
 
 const RESUME_KEYS = ["cordy_chat_transcript", "cordy_questions_asked", "cordy_max_override"];
 const NOTIFY_STORAGE_KEY = "cordy_notify_signups";
+const REAL_CORDY_URL = "https://cordy.sg";
+
+/** Drop a rejected interest tag out of the structured filters so matches can be recomputed without it. */
+function filtersWithoutTag(filters: OpportunityFilters, tag: string): OpportunityFilters {
+  const norm = tag.toLowerCase().replace(/[-\s]+/g, " ").trim();
+  const next: OpportunityFilters = { ...filters };
+  if (next.subTags?.length) {
+    next.subTags = next.subTags.filter(
+      (t) => t.toLowerCase().replace(/[-\s]+/g, " ").trim() !== norm,
+    );
+    if (next.subTags.length === 0) delete next.subTags;
+  }
+  if (next.category?.toLowerCase() === norm) delete next.category;
+  return next;
+}
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -20,6 +37,10 @@ export default function ProfilePage() {
   const [shareCopied, setShareCopied] = useState(false);
   const [notifyEmail, setNotifyEmail] = useState("");
   const [notifySubmitted, setNotifySubmitted] = useState(false);
+  const [rejectedTags, setRejectedTags] = useState<string[]>([]);
+  const [liveMatches, setLiveMatches] = useState<Opportunity[] | null>(null);
+  const [comparedRealCordy, setComparedRealCordy] = useState(false);
+  const [preferred, setPreferred] = useState<"cordy" | "browse" | "same" | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("cordy_profile");
@@ -27,11 +48,13 @@ export default function ProfilePage() {
       setProfile(JSON.parse(raw) as ProfileData);
     }
     setLoaded(true);
+    trackEvent("viewed_profile");
   }, []);
 
   function restart() {
     localStorage.removeItem("cordy_profile");
     for (const key of RESUME_KEYS) localStorage.removeItem(key);
+    clearComparisonOutcome();
     router.push("/intro");
   }
 
@@ -55,6 +78,38 @@ export default function ProfilePage() {
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2500);
     }
+  }
+
+  // ── Tag correction ─────────────────────────────────────────────────────
+  // Tapping "not me" on a tag does two jobs at once: it immediately re-ranks
+  // the matches (so the user sees their correction take effect rather than
+  // being told it was noted), and it records a gold-standard negative label —
+  // a case where the inference was demonstrably wrong — which is exactly the
+  // data needed to evaluate and improve the real matcher.
+  function rejectTag(tag: string) {
+    if (!profile) return;
+    const nextRejected = [...rejectedTags, tag];
+    const nextFilters = nextRejected.reduce(
+      (acc, t) => filtersWithoutTag(acc, t),
+      profile.filters ?? {},
+    );
+
+    setRejectedTags(nextRejected);
+    setLiveMatches(matchOpportunities(nextFilters, 4));
+    updateComparisonOutcome({ rejectedTags: nextRejected });
+    trackEvent("rejected_tag", tag);
+  }
+
+  function openRealCordy() {
+    setComparedRealCordy(true);
+    updateComparisonOutcome({ triedRealCordy: "yes" });
+    trackEvent("compared_real_cordy");
+    window.open(REAL_CORDY_URL, "_blank", "noopener,noreferrer");
+  }
+
+  function choosePreferred(choice: "cordy" | "browse" | "same") {
+    setPreferred(choice);
+    updateComparisonOutcome({ preferredList: choice });
   }
 
   function submitNotify(e: React.FormEvent) {
@@ -91,7 +146,10 @@ export default function ProfilePage() {
 
   if (!profile) return null;
 
-  const hasMatches = profile.opportunities.length > 0;
+  const shownTags = profile.tags.filter((t) => !rejectedTags.includes(t));
+  const shownMatches = liveMatches ?? profile.opportunities;
+  const hasMatches = shownMatches.length > 0;
+  const browseList = browseByCategory(profile.filters?.category, 4);
 
   return (
     <div className="flex min-h-dvh flex-col items-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
@@ -121,14 +179,37 @@ export default function ProfilePage() {
         <p className="mt-2 text-sm leading-relaxed text-cordy-ink/70">{profile.summary}</p>
 
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {profile.tags.length > 0 ? (
-            profile.tags.map((tag) => <InterestTag key={tag} tag={tag} />)
+          {shownTags.length > 0 ? (
+            shownTags.map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-1">
+                <InterestTag tag={tag} />
+                <button
+                  onClick={() => rejectTag(tag)}
+                  aria-label={`Remove "${tag}" — this isn't me`}
+                  title="Not me"
+                  className="-ml-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-cordy-ink bg-white text-[10px] font-bold text-cordy-ink transition-transform hover:-translate-y-0.5"
+                >
+                  ×
+                </button>
+              </span>
+            ))
           ) : (
             <span className="rounded-2xl bg-[#f3ecda] px-3.5 py-2 text-sm text-cordy-ink/60 italic">
               No strong signals yet — that&apos;s okay!
             </span>
           )}
         </div>
+        {shownTags.length > 0 && (
+          <p className="mt-2 text-xs text-cordy-ink/50">
+            Got one wrong? Tap × and your matches update straight away.
+          </p>
+        )}
+        {rejectedTags.length > 0 && (
+          <p className="mt-1.5 text-xs font-semibold text-cordy-teal">
+            ✓ Updated — removed {rejectedTags.length} thing{rejectedTags.length === 1 ? "" : "s"} that
+            wasn&apos;t you.
+          </p>
+        )}
 
         <button
           onClick={() => void shareWithGuardian()}
@@ -144,7 +225,7 @@ export default function ProfilePage() {
               Sample matches from CORDY&apos;s opportunities list, based on what you shared.
             </p>
             <div className="flex flex-col gap-3">
-              {profile.opportunities.map((opp) => (
+              {shownMatches.map((opp) => (
                 <OpportunityCard
                   key={opp.id}
                   opportunity={opp}
@@ -152,6 +233,83 @@ export default function ProfilePage() {
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Did this actually beat browsing? ──────────────────────────────
+            The survey's headline question asks people to compare CORDY with
+            browsing themselves. Asked cold, that's a memory test. Shown here,
+            side by side and in context, it's a real choice — and we record
+            both the answer and whether they went and checked the real Cordy,
+            so the survey response can be segmented on it later. */}
+        {hasMatches && (
+          <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
+            <h2 className="font-heading text-base font-bold text-cordy-ink">
+              Was this better than browsing yourself?
+            </h2>
+            <p className="mt-1 mb-3.5 text-xs leading-relaxed text-cordy-ink/60">
+              On the left is what CORDY picked from your chat. On the right is what you&apos;d see
+              just clicking the category and scrolling.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border-2 border-cordy-teal bg-white p-3">
+                <p className="mb-2 text-xs font-bold text-cordy-ink">🤖 CORDY picked</p>
+                <ul className="flex flex-col gap-1.5">
+                  {shownMatches.map((o) => (
+                    <li key={o.id} className="text-xs leading-snug text-cordy-ink/80">
+                      • {o.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border-2 border-cordy-cream bg-cordy-cream/50 p-3">
+                <p className="mb-2 text-xs font-bold text-cordy-ink/70">📋 Just browsing</p>
+                <ul className="flex flex-col gap-1.5">
+                  {browseList.map((o) => (
+                    <li key={o.id} className="text-xs leading-snug text-cordy-ink/60">
+                      • {o.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <p className="mt-3.5 text-xs font-semibold text-cordy-ink">
+              Which list would you actually act on?
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(
+                [
+                  ["cordy", "CORDY's picks"],
+                  ["same", "About the same"],
+                  ["browse", "Just browsing"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => choosePreferred(value)}
+                  aria-pressed={preferred === value}
+                  className={`rounded-2xl border-2 border-cordy-ink px-3.5 py-1.5 text-xs font-bold shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 ${
+                    preferred === value ? "bg-cordy-teal text-cordy-ink" : "bg-white text-cordy-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {preferred && (
+              <p className="mt-2 text-xs font-semibold text-cordy-teal">✓ Thanks — noted!</p>
+            )}
+
+            <button
+              onClick={openRealCordy}
+              className="mt-3.5 text-xs font-semibold text-cordy-ink/50 underline hover:text-cordy-ink"
+            >
+              {comparedRealCordy
+                ? "✓ Opened the real Cordy — come back and tell us how it compared"
+                : "Want a fairer test? Try the real Cordy in a new tab →"}
+            </button>
           </div>
         )}
 

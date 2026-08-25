@@ -249,6 +249,12 @@ export function SurveyForm({ config, onSubmit, doneAction }: SurveyFormProps) {
         );
       })}
 
+      {config.privacyNotice && (
+        <p className="mt-7 rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed opacity-70" style={{ background: theme.cream }}>
+          {config.privacyNotice}
+        </p>
+      )}
+
       {error && <p className="mt-4 text-xs font-semibold text-red-600">{error}</p>}
 
       <button

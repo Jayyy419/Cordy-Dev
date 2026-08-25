@@ -15,7 +15,7 @@ export const LIMITS = {
   /** Max keys accepted in survey meta/answers combined */
   MAX_SURVEY_FIELDS: 30,
   /** Max characters for any single survey field value */
-  MAX_SURVEY_VALUE_CHARS: 2000,
+  MAX_SURVEY_VALUE_CHARS: 8000,
   /** Max categories accepted by the opener route */
   MAX_CATEGORIES: 12,
   /** Max chars of a base64 payload the /shared page will attempt to decode */

@@ -257,6 +257,30 @@ export function scoreOpportunity(opp: Opportunity, filters: OpportunityFilters):
   return score;
 }
 
+/**
+ * What a plain category-listing browse would surface: everything in the
+ * category, in catalog order, with no personalisation at all. This is the
+ * honest control condition for the results-screen A/B — it's what the user
+ * would have got by clicking the category themselves.
+ */
+export function browseByCategory(category: string | undefined, limit = 4): Opportunity[] {
+  const pool = category ? CATALOG.filter((o) => o.category === category) : CATALOG;
+  return pool.slice(0, limit);
+}
+
+/** Total catalog size — the starting point for the "narrowing" counter in chat. */
+export const CATALOG_SIZE = CATALOG.length;
+
+/**
+ * How many catalog entries still plausibly match the filters known so far.
+ * Drives the live "47 -> 12 -> 4" narrowing counter during the conversation,
+ * which makes the value of each answer visible instead of implied.
+ */
+export function countMatches(filters: OpportunityFilters): number {
+  if (Object.keys(filters).length === 0) return CATALOG.length;
+  return CATALOG.filter((opp) => scoreOpportunity(opp, filters) > 0).length;
+}
+
 export function matchOpportunities(
   filters: OpportunityFilters,
   limit = 4,

@@ -4,7 +4,9 @@ import { env } from "~/env";
 import { clampMaxQuestions, toSafeInt, validateChatMessages } from "~/lib/apiLimits";
 import {
   buildRetrievalBlockFromCandidates,
+  CATALOG_SIZE,
   confidenceFromFilters,
+  countMatches,
   matchOpportunities,
 } from "~/lib/opportunities";
 import {
@@ -60,6 +62,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
         confidence: 0,
         done: false,
         tags: [],
+        candidatesRemaining: CATALOG_SIZE,
+        catalogSize: CATALOG_SIZE,
       },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
     );
@@ -71,7 +75,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   } catch {
     return respond(
       request,
-      { message: "Invalid request body", suggestions: [], confidence: 0, done: false, tags: [] },
+      { message: "Invalid request body", suggestions: [], confidence: 0, done: false, tags: [], candidatesRemaining: CATALOG_SIZE, catalogSize: CATALOG_SIZE },
       { status: 400 },
     );
   }
@@ -80,7 +84,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   if (!messages) {
     return respond(
       request,
-      { message: "Invalid or oversized messages array", suggestions: [], confidence: 0, done: false, tags: [] },
+      { message: "Invalid or oversized messages array", suggestions: [], confidence: 0, done: false, tags: [], candidatesRemaining: CATALOG_SIZE, catalogSize: CATALOG_SIZE },
       { status: 400 },
     );
   }
@@ -102,6 +106,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   // asked of the model — it can only move the way the data actually
   // supports, so it can't visibly regress turn to turn.
   const computedConfidence = confidenceFromFilters(inferredFilters);
+  const candidatesRemaining = countMatches(inferredFilters);
 
   // Pacing is decided server-side within [MIN_QUESTIONS, effectiveMax].
   // effectiveMax is normally MAX_QUESTIONS, but the client may raise it when
@@ -145,7 +150,7 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     console.error("[chat/route] Claude API error:", err);
     return respond(
       request,
-      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false, tags: [] },
+      { message: "Something went wrong. Please try again.", suggestions: [], confidence: 0, done: false, tags: [], candidatesRemaining: CATALOG_SIZE, catalogSize: CATALOG_SIZE },
       { status: 502 },
     );
   }
@@ -160,6 +165,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
       confidence: computedConfidence,
       done: false,
       tags: parsed.interests,
+      candidatesRemaining,
+      catalogSize: CATALOG_SIZE,
     });
   }
 
@@ -180,6 +187,8 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
     done: true,
     profile: profileData,
     tags: profileData.tags,
+    candidatesRemaining: profileData.opportunities.length,
+    catalogSize: CATALOG_SIZE,
   });
 }
 

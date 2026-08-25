@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { SurveyForm } from "~/components/SurveyForm";
+import { trackEvent } from "~/lib/analytics";
 import { getOrCreateProfileId } from "~/lib/backendProfileSim";
+import { readComparisonOutcome, readTranscriptForSubmission } from "~/lib/studyContext";
 import { submitSurveyLocal } from "~/lib/surveySim";
 import type { SurveyAnswers, SurveyModuleConfig } from "~/lib/survey/types";
 
@@ -20,6 +23,8 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
   submitLabel: "Submit feedback",
   doneTitle: "Thanks so much! 🙏",
   doneMessage: "Your feedback genuinely helps us figure out if this is worth building for real.",
+  privacyNotice:
+    "What we keep: your answers above, the chat you had with CORDY, and an anonymous id for this browser. Name and school are optional — leave them blank and your response stays anonymous. We use this only to decide whether to build CORDY's matching for real, and we don't share it with anyone outside the team or use it to contact you.",
   questions: [
     {
       id: "overallRating",
@@ -133,16 +138,40 @@ const SURVEY_CONFIG: SurveyModuleConfig = {
       multiline: true,
       placeholder: "Type here...",
     },
-    { id: "name", type: "text", label: "What's your name?", required: true, placeholder: "Type here..." },
-    { id: "school", type: "text", label: "What school are you at?", required: true, placeholder: "Type here..." },
+    {
+      id: "name",
+      type: "text",
+      label: "Your name — only if you're happy to share it",
+      placeholder: "You can leave this blank",
+    },
+    {
+      id: "school",
+      type: "text",
+      label: "Your school — only if you're happy to share it",
+      placeholder: "You can leave this blank",
+    },
   ],
 };
 
 export default function SurveyPage() {
   const router = useRouter();
 
+  useEffect(() => {
+    trackEvent("started_survey");
+  }, []);
+
   async function handleSubmit(answers: SurveyAnswers) {
-    const meta = { profileId: getOrCreateProfileId() };
+    const comparison = readComparisonOutcome();
+    const meta: Record<string, string> = {
+      profileId: getOrCreateProfileId(),
+      // Recorded on the results screen, not asked here — so vsBrowsing can be
+      // segmented by whether they actually opened the real Cordy to compare
+      // rather than answered from memory.
+      triedRealCordy: comparison.triedRealCordy,
+      preferredList: comparison.preferredList,
+      rejectedTags: comparison.rejectedTags.join(", "),
+      transcript: readTranscriptForSubmission(),
+    };
     // Local copy first (works even if the network request fails), then the
     // real server-side write (Airtable when configured — see
     // src/app/api/survey/route.ts).
@@ -155,6 +184,7 @@ export default function SurveyPage() {
     if (!res.ok) {
       throw new Error(`/api/survey responded ${res.status}`);
     }
+    trackEvent("completed_survey");
   }
 
   return (
