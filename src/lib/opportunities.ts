@@ -339,7 +339,13 @@ export function buildRetrievalBlock(filters: OpportunityFilters): string {
 const MAX_POSSIBLE_SCORE = 4 + 3 * 2 + 1.5 + 1.5 + 1.5; // category + subTags(~3) + format + groupSize + skillLevel
 
 export function confidenceFromFilters(filters: OpportunityFilters): number {
-  const scores = CATALOG.map((opp) => scoreOpportunity(opp, filters)).sort((a, b) => b - a);
+  // Age-gated entries score -Infinity, which must be dropped before any
+  // arithmetic: leaving them in makes `top - runnerUp` infinite whenever only
+  // one entry clears the gate, which pinned confidence to a bogus 100%. It
+  // also makes the (a - b) comparator return NaN when two are compared.
+  const scores = CATALOG.map((opp) => scoreOpportunity(opp, filters))
+    .filter((s) => Number.isFinite(s))
+    .sort((a, b) => b - a);
   const top = scores[0] ?? 0;
   if (top <= 0) return 0;
 

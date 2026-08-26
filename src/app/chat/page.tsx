@@ -276,14 +276,24 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error(err);
+      // Every route already returns a friendly, situation-specific `message`
+      // (rate limited vs. upstream failure vs. bad request) and fetchJson
+      // rethrows it. Showing a single generic line instead threw all that
+      // away — "try again" is actively wrong advice when the real answer is
+      // "wait a minute", and it made production failures indistinguishable
+      // from each other. Prefer the server's wording when we have it.
       const timedOut = err instanceof DOMException && err.name === "AbortError";
+      const serverMessage =
+        !timedOut && err instanceof Error && err.message && !err.message.startsWith("Request failed (")
+          ? err.message
+          : null;
       setMessages((prev) => [
         ...prev,
         createMessage(
           "assistant",
           timedOut
             ? "Aiya, that took too long! Give it another go?"
-            : "Aiya, something went wrong on my end! Can you try sending that again?",
+            : (serverMessage ?? "Aiya, something went wrong on my end! Can you try sending that again?"),
         ),
       ]);
       setLastFailedContent(content);

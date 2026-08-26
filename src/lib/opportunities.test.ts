@@ -111,3 +111,29 @@ describe("estimatedRecentJoins", () => {
     }
   });
 });
+
+describe("confidenceFromFilters age-gate interaction", () => {
+  // The age gate scores excluded entries -Infinity. With today's placeholder
+  // catalog the gate never leaves exactly one survivor, so the infinite
+  // top-vs-runnerUp separation isn't reachable through the public API — but a
+  // real catalog with narrower age bands would expose it immediately, so the
+  // invariant is worth pinning down now rather than after the swap.
+  it("stays finite and within 0-100 across age ranges that gate out most of the catalog", () => {
+    for (let lo = 10; lo <= 25; lo++) {
+      for (let hi = lo; hi <= 25; hi++) {
+        const confidence = confidenceFromFilters({
+          category: "Tech & Coding",
+          ageMin: lo,
+          ageMax: hi,
+        });
+        expect(Number.isFinite(confidence), `ageMin=${lo} ageMax=${hi}`).toBe(true);
+        expect(confidence).toBeGreaterThanOrEqual(0);
+        expect(confidence).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it("returns 0 when the age range excludes the whole catalog", () => {
+    expect(confidenceFromFilters({ ageMin: 60, ageMax: 70 })).toBe(0);
+  });
+});
