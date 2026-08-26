@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { OpportunityFilters } from "./types";
 import {
   CATALOG,
   confidenceFromFilters,
@@ -135,5 +136,37 @@ describe("confidenceFromFilters age-gate interaction", () => {
 
   it("returns 0 when the age range excludes the whole catalog", () => {
     expect(confidenceFromFilters({ ageMin: 60, ageMax: 70 })).toBe(0);
+  });
+});
+
+describe("confidenceFromFilters monotonicity", () => {
+  // The old formula blended in a top-vs-runnerUp "separation" term, which
+  // fell whenever a newly-learned fact was shared by both leading candidates.
+  // The user-visible effect was confidence dropping after answering another
+  // question. Accumulating filters must never reduce it.
+  it("never decreases as filters accumulate", () => {
+    const steps: OpportunityFilters[] = [
+      {},
+      { category: "Tech & Coding" },
+      { category: "Tech & Coding", subTags: ["coding"] },
+      { category: "Tech & Coding", subTags: ["coding"], format: "in-person" },
+      { category: "Tech & Coding", subTags: ["coding"], format: "in-person", groupSize: "team" },
+      {
+        category: "Tech & Coding",
+        subTags: ["coding"],
+        format: "in-person",
+        groupSize: "team",
+        skillLevel: "beginner",
+      },
+    ];
+
+    const series = steps.map((f) => confidenceFromFilters(f));
+    for (let i = 1; i < series.length; i++) {
+      expect(series[i], `step ${i} (${series[i - 1]} -> ${series[i]})`).toBeGreaterThanOrEqual(
+        series[i - 1]!,
+      );
+    }
+    // And it should actually move, not just sit flat.
+    expect(series[series.length - 1]!).toBeGreaterThan(series[0]!);
   });
 });

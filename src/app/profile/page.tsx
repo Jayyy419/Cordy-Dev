@@ -156,7 +156,7 @@ export default function ProfilePage() {
       <div className="sticky top-0 z-20 mb-4 flex w-full max-w-[560px] justify-center pt-1 sm:mb-6">
         <button
           onClick={() => router.push("/survey")}
-          className="rounded-full border-2 border-cordy-ink bg-cordy-teal px-5 py-2.5 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+          className="rounded-full border-2 border-cordy-ink bg-cordy-teal px-7 py-3.5 font-heading text-base font-bold text-cordy-ink shadow-[4px_4px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:px-8 sm:text-lg"
         >
           📝 Take a short survey
         </button>
@@ -301,17 +301,25 @@ export default function ProfilePage() {
             {preferred && (
               <p className="mt-2 text-xs font-semibold text-cordy-teal">✓ Thanks — noted!</p>
             )}
-
-            <button
-              onClick={openRealCordy}
-              className="mt-3.5 text-xs font-semibold text-cordy-ink/50 underline hover:text-cordy-ink"
-            >
-              {comparedRealCordy
-                ? "✓ Opened the real Cordy — come back and tell us how it compared"
-                : "Want a fairer test? Try the real Cordy in a new tab →"}
-            </button>
           </div>
         )}
+
+        {/* Always available, not just when there are matches to compare — if
+            CORDY found nothing for you, checking the real Cordy is *more*
+            useful, not less, and we still want triedRealCordy recorded. */}
+        <div className="mt-7 rounded-2xl border-2 border-dashed border-cordy-ink/25 p-4 text-left">
+          <p className="text-sm font-bold text-cordy-ink">Curious how the real Cordy compares?</p>
+          <p className="mt-1 text-xs leading-relaxed text-cordy-ink/70">
+            Open it in a new tab and have a look — then come back here, your profile stays put.
+            It helps us a lot to know whether this actually beat doing it yourself.
+          </p>
+          <button
+            onClick={openRealCordy}
+            className="mt-2.5 rounded-2xl border-2 border-cordy-ink bg-white px-4 py-2 text-xs font-bold text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+          >
+            {comparedRealCordy ? "✓ Opened — thanks!" : "Open the real Cordy ↗"}
+          </button>
+        </div>
 
         <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
           <h2 className="font-heading text-sm font-bold text-cordy-ink">Nothing quite right yet?</h2>

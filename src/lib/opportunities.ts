@@ -349,11 +349,33 @@ export function confidenceFromFilters(filters: OpportunityFilters): number {
   const top = scores[0] ?? 0;
   if (top <= 0) return 0;
 
-  const runnerUp = scores[1] ?? 0;
-  const coverage = Math.min(1, top / MAX_POSSIBLE_SCORE);
-  const separation = top > 0 ? Math.max(0, (top - runnerUp) / top) : 0;
+  // Two monotonic terms, deliberately NOT the old top-vs-runnerUp
+  // "separation". Separation fell whenever a newly-learned fact was shared by
+  // both leading candidates — it raised `top` without widening the gap — so
+  // answering another question could *lower* the number on screen. Confidence
+  // that drops as you tell CORDY more is perverse and reads as a bug.
+  //
+  // Both terms below only rise as the transcript grows: `strength` because
+  // scoring is purely additive per filter, `specificity` because the inferred
+  // filter set only accumulates. The one legitimate exception is the age hard
+  // gate, which can retire a previous best match — the client keeps a
+  // high-water mark so that never shows up as a visible regression.
+  const strength = Math.min(1, top / MAX_POSSIBLE_SCORE);
+  const specificity = filterSpecificity(filters);
 
-  return Math.round(Math.min(100, Math.max(0, (0.6 * coverage + 0.4 * separation) * 100)));
+  return Math.round(Math.min(100, Math.max(0, (0.55 * strength + 0.45 * specificity) * 100)));
+}
+
+/** Fraction of the catalog's discriminating dimensions we've actually pinned down. */
+function filterSpecificity(filters: OpportunityFilters): number {
+  const known = [
+    Boolean(filters.category),
+    Boolean(filters.subTags?.length),
+    Boolean(filters.format),
+    Boolean(filters.groupSize),
+    Boolean(filters.skillLevel),
+  ].filter(Boolean).length;
+  return known / 5;
 }
 
 // ── Explainable matches ───────────────────────────────────────────────────

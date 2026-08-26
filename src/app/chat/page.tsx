@@ -151,10 +151,16 @@ export default function ChatPage() {
     let raf: number;
     const tick = () => {
       const prev = displayedProgressRef.current;
-      const target = done ? 100 : busy ? Math.min(prev + 0.4, confidence + 12, 92) : confidence;
+      // While waiting we creep forward so the bar isn't frozen, but only ever
+      // a little way past what's actually been earned — and crucially the bar
+      // is monotonic: if the arriving confidence is below where the creep got
+      // to, we hold position instead of animating backwards. A progress bar
+      // that visibly retreats reads as broken even when the number is honest.
+      const ceiling = Math.min(confidence + 8, 92);
+      const target = done ? 100 : busy ? Math.max(prev, Math.min(prev + 0.25, ceiling)) : Math.max(prev, confidence);
       const next = prev + (target - prev) * 0.08;
       const settled = Math.abs(target - next) < 0.05;
-      const value = settled ? target : next;
+      const value = Math.max(prev, settled ? target : next);
       displayedProgressRef.current = value;
       setDisplayedProgress(value);
       // Once settled and nothing is actively creeping (not busy), the target
