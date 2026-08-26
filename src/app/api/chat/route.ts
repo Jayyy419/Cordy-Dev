@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { env } from "~/env";
 import { clampMaxQuestions, toSafeInt, validateChatMessages } from "~/lib/apiLimits";
 import {
+  bestDiscriminator,
   buildRetrievalBlockFromCandidates,
   CATALOG_SIZE,
   confidenceFromFilters,
   countMatches,
   matchOpportunities,
+  shouldStopAsking,
 } from "~/lib/opportunities";
 import {
   buildProfileFromReply,
@@ -19,6 +21,7 @@ import {
   SYSTEM_PROMPT,
 } from "~/lib/prompts";
 import { checkCombinedRateLimit, clientIpFrom } from "~/lib/rateLimit";
+import { buildTapOnlyTurn } from "~/lib/tapOnlyTurn";
 import { ensureSessionCookie, readSessionId } from "~/lib/session";
 import { semanticRetrieve } from "~/lib/semanticRetrieval";
 import type {
@@ -113,12 +116,46 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   // the user opts to "keep chatting" after already seeing a results screen.
   const effectiveMax = clampMaxQuestions(maxQuestions, MAX_QUESTIONS);
   const forcedContinue = questionsAsked < MIN_QUESTIONS;
-  const forcedFinal = questionsAsked >= effectiveMax;
+
+  // Adaptive stopping. Previously the conversation always ran to
+  // effectiveMax; now it also ends as soon as another question couldn't
+  // narrow anything — either the remaining candidates agree on every field
+  // we could ask about, or the pool is already down to a couple of entries.
+  // A question that doesn't discriminate is a question not worth asking, and
+  // "took too long" was the most common complaint about the flow.
+  const exhausted = shouldStopAsking(candidates, inferredFilters, candidatesRemaining);
+  const forcedFinal = questionsAsked >= effectiveMax || (!forcedContinue && exhausted);
   const pacingInstruction = forcedFinal
     ? `PACING: This is the FINAL turn — the question limit has been reached. Your REPLY must be a warm wrap-up with NO new question, DONE must be true.`
     : forcedContinue
       ? `PACING: You must continue — ask one more discriminating question. DONE must be false.`
       : `PACING: The computed match confidence is ${computedConfidence}%. You may wrap up now (DONE: true) ONLY if that is roughly ${CONFIDENCE_STOP}+ ; otherwise ask one more discriminating question (DONE: false).`;
+
+  // ── Tap-only fast path ─────────────────────────────────────────────────
+  // If this turn was always going to be "pick one of these", answer it from
+  // the catalog and skip the model entirely: no latency, no cost, and every
+  // option is a value that genuinely exists in the inventory rather than one
+  // the model invented. Only taken mid-conversation — the opener and the
+  // wrap-up both need real writing, and neither do the opening exchanges —
+  // forcedContinue covers those, so a tap turn can only ever land once the
+  // conversation has already earned some rapport.
+  if (!forcedFinal && !forcedContinue) {
+    const split = bestDiscriminator(candidates, inferredFilters);
+    const tapTurn = split
+      ? buildTapOnlyTurn(split, candidates.map((c) => c.id).join(","))
+      : null;
+    if (tapTurn) {
+      return respond(request, {
+        message: tapTurn.message,
+        suggestions: tapTurn.suggestions,
+        confidence: computedConfidence,
+        done: false,
+        tags: [],
+        candidatesRemaining,
+        catalogSize: CATALOG_SIZE,
+      });
+    }
+  }
 
   const messagesWithContext = [
     ...messages,

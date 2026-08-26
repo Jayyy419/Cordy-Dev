@@ -153,14 +153,6 @@ export default function ProfilePage() {
 
   return (
     <div className="flex min-h-dvh flex-col items-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
-      <div className="sticky top-0 z-20 mb-4 flex w-full max-w-[560px] justify-center pt-1 sm:mb-6">
-        <button
-          onClick={() => router.push("/survey")}
-          className="rounded-full border-2 border-cordy-ink bg-cordy-teal px-7 py-3.5 font-heading text-base font-bold text-cordy-ink shadow-[4px_4px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:px-8 sm:text-lg"
-        >
-          📝 Take a short survey
-        </button>
-      </div>
 
       <div className="animate-bounce-in w-full max-w-[560px] rounded-[32px] border-4 border-cordy-ink bg-white p-6 text-center shadow-[0_30px_60px_rgba(22,33,62,0.22)] sm:rounded-[44px] sm:p-11">
         <div className="animate-mascot-bounce mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border-4 border-cordy-red bg-[#ffd28f] sm:mb-5 sm:h-24 sm:w-24">
@@ -211,11 +203,15 @@ export default function ProfilePage() {
           </p>
         )}
 
+        {/* Promoted from a muted text link: a read-only profile a young person
+            can hand to a parent is one of the few things here the real Cordy
+            can't already do, so it shouldn't be the least visible thing on the
+            screen. */}
         <button
           onClick={() => void shareWithGuardian()}
-          className="mt-4 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"
+          className="mt-5 w-full rounded-2xl border-2 border-cordy-ink bg-white px-5 py-3 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5 sm:w-auto sm:px-6"
         >
-          {shareCopied ? "Link copied! ✓" : "👪 Share with a parent/guardian →"}
+          {shareCopied ? "Link copied! ✓" : "👪 Share this with a parent or guardian"}
         </button>
 
         {hasMatches && (
@@ -304,21 +300,40 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Always available, not just when there are matches to compare — if
-            CORDY found nothing for you, checking the real Cordy is *more*
-            useful, not less, and we still want triedRealCordy recorded. */}
-        <div className="mt-7 rounded-2xl border-2 border-dashed border-cordy-ink/25 p-4 text-left">
-          <p className="text-sm font-bold text-cordy-ink">Curious how the real Cordy compares?</p>
-          <p className="mt-1 text-xs leading-relaxed text-cordy-ink/70">
-            Open it in a new tab and have a look — then come back here, your profile stays put.
-            It helps us a lot to know whether this actually beat doing it yourself.
-          </p>
-          <button
-            onClick={openRealCordy}
-            className="mt-2.5 rounded-2xl border-2 border-cordy-ink bg-white px-4 py-2 text-xs font-bold text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
-          >
-            {comparedRealCordy ? "✓ Opened — thanks!" : "Open the real Cordy ↗"}
-          </button>
+        {/* ── What next ─────────────────────────────────────────────────────
+            The two things we actually want from someone at this point, offered
+            as one explicit choice rather than scattered around the screen:
+            go look at the real Cordy, or tell us how this went. Both are
+            recorded — the real-Cordy route sets triedRealCordy, which is what
+            lets the survey's "better than browsing?" answer be segmented by
+            whether they genuinely compared. */}
+        <div className="mt-8 border-t-2 border-cordy-cream pt-6">
+          <h2 className="font-heading text-base font-bold text-cordy-ink">What next?</h2>
+          <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
+            <button
+              onClick={openRealCordy}
+              className="rounded-2xl border-2 border-cordy-ink bg-white p-4 text-left shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+            >
+              <p className="font-heading text-sm font-bold text-cordy-ink">
+                {comparedRealCordy ? "✓ Opened the real Cordy" : "Visit the real Cordy ↗"}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-cordy-ink/65">
+                {comparedRealCordy
+                  ? "Thanks! Come back and tell us how it compared."
+                  : "Opens in a new tab — your profile stays right here."}
+              </p>
+            </button>
+
+            <button
+              onClick={() => router.push("/survey")}
+              className="rounded-2xl border-2 border-cordy-ink bg-cordy-teal p-4 text-left shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+            >
+              <p className="font-heading text-sm font-bold text-cordy-ink">📝 Take a short survey</p>
+              <p className="mt-1 text-xs leading-relaxed text-cordy-ink/70">
+                About a minute. It genuinely decides whether we build this properly.
+              </p>
+            </button>
+          </div>
         </div>
 
         <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
