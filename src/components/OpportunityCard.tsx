@@ -77,10 +77,21 @@ export function OpportunityCard({ opportunity, matchReasons, readOnly = false }:
         ))}
       </div>
 
+      {/* Promoted from a muted one-liner to a real panel. "How do I know these
+          are even real / meant for me?" is the objection most likely to sink
+          trust in the matches, and this is the answer — so it should read as
+          evidence, not as a footnote. */}
       {matchReasons && matchReasons.length > 0 && (
-        <div className="rounded-xl bg-cordy-cream px-3 py-2 text-xs text-cordy-ink/70">
-          <span className="font-semibold text-cordy-ink">Why this matched: </span>
-          {matchReasons.join(" · ")}
+        <div className="rounded-xl border-2 border-cordy-teal/50 bg-cordy-cream px-3 py-2.5">
+          <p className="text-xs font-bold text-cordy-ink">Why CORDY picked this for you</p>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {matchReasons.map((reason) => (
+              <li key={reason} className="flex gap-1.5 text-xs leading-snug text-cordy-ink/75">
+                <span aria-hidden className="text-cordy-teal">✓</span>
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

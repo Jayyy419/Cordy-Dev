@@ -60,6 +60,10 @@ export interface ChatResponse {
   profile?: ProfileData;
   /** Cumulative interest tags spotted so far this turn (even before DONE), for a live tag-reveal UI. */
   tags: string[];
+  /** How many catalog entries still match what's known — drives the live narrowing counter. */
+  candidatesRemaining: number;
+  /** Total catalog size, so the client can render "N of M" without importing the catalog. */
+  catalogSize: number;
 }
 
 export interface OpenerRequest {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { trackEvent } from "~/lib/analytics";
 import type { ProfileData } from "~/lib/types";
 
 function readSavedProfile(): ProfileData | null {
@@ -27,6 +28,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setSavedProfile(readSavedProfile());
+    trackEvent("landed");
   }, []);
 
   const tagCount = savedProfile?.tags.length ?? 0;

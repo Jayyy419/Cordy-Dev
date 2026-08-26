@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { trackEvent } from "~/lib/analytics";
 import { buildPartialProfile } from "~/lib/backendProfileSim";
 import {
   getMcqFlow,
@@ -13,6 +14,10 @@ export default function McqPage() {
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<McqAnswers>({});
+
+  useEffect(() => {
+    trackEvent("started_mcq");
+  }, []);
 
   const flow = getMcqFlow(answers);
   const question = flow[index]!;

@@ -74,6 +74,12 @@ export interface SurveyModuleConfig {
   submitLabel?: string;
   doneTitle?: string;
   doneMessage?: string;
+  /**
+   * Plain-English notice about what's collected and why, rendered above the
+   * submit button. Required reading wherever the survey collects anything
+   * identifying — especially from minors.
+   */
+  privacyNotice?: string;
   theme?: Partial<SurveyTheme>;
 }
 

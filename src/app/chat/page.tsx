@@ -7,6 +7,7 @@ import { ChatBubble } from "~/components/ChatBubble";
 import { InterestTag } from "~/components/InterestTag";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
+import { trackEvent } from "~/lib/analytics";
 import { buildPartialProfile, getOrCreateProfileId, persistBackendProfile } from "~/lib/backendProfileSim";
 import { MCQ_CATEGORIES_STORAGE_KEY } from "~/lib/mcq";
 import { inferFiltersFromTranscript, MAX_QUESTIONS } from "~/lib/prompts";
@@ -98,6 +99,7 @@ export default function ChatPage() {
   const [questionsAsked, setQuestionsAsked] = useState(resumeState?.questionsAsked ?? 0);
   const [effectiveMax] = useState(resumeState?.effectiveMax ?? MAX_QUESTIONS);
   const [confidence, setConfidence] = useState(0);
+  const [candidates, setCandidates] = useState<{ remaining: number; total: number } | null>(null);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const [done, setDone] = useState(false);
   const [mouthAnim, setMouthAnim] = useState<MouthAnim>(null);
@@ -126,6 +128,7 @@ export default function ChatPage() {
     localStorage.removeItem(TRANSCRIPT_KEY);
     localStorage.removeItem(QUESTIONS_ASKED_KEY);
     localStorage.removeItem(MAX_OVERRIDE_KEY);
+    trackEvent("started_chat");
     if (resumeState) {
       setMessages((prev) => [
         ...prev,
@@ -148,10 +151,16 @@ export default function ChatPage() {
     let raf: number;
     const tick = () => {
       const prev = displayedProgressRef.current;
-      const target = done ? 100 : busy ? Math.min(prev + 0.4, confidence + 12, 92) : confidence;
+      // While waiting we creep forward so the bar isn't frozen, but only ever
+      // a little way past what's actually been earned — and crucially the bar
+      // is monotonic: if the arriving confidence is below where the creep got
+      // to, we hold position instead of animating backwards. A progress bar
+      // that visibly retreats reads as broken even when the number is honest.
+      const ceiling = Math.min(confidence + 8, 92);
+      const target = done ? 100 : busy ? Math.max(prev, Math.min(prev + 0.25, ceiling)) : Math.max(prev, confidence);
       const next = prev + (target - prev) * 0.08;
       const settled = Math.abs(target - next) < 0.05;
-      const value = settled ? target : next;
+      const value = Math.max(prev, settled ? target : next);
       displayedProgressRef.current = value;
       setDisplayedProgress(value);
       // Once settled and nothing is actively creeping (not busy), the target
@@ -251,8 +260,10 @@ export default function ChatPage() {
       const nextQuestionsAsked = data.profile ? questionsAsked : questionsAsked + 1;
       const nextTags = data.tags.length ? data.tags : profile;
       setProfile(nextTags);
+      setCandidates({ remaining: data.candidatesRemaining, total: data.catalogSize });
 
       if (data.profile) {
+        trackEvent("completed_chat");
         setPendingProfile(data.profile);
         setDone(true);
         setSuggestions([]);
@@ -271,14 +282,24 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error(err);
+      // Every route already returns a friendly, situation-specific `message`
+      // (rate limited vs. upstream failure vs. bad request) and fetchJson
+      // rethrows it. Showing a single generic line instead threw all that
+      // away — "try again" is actively wrong advice when the real answer is
+      // "wait a minute", and it made production failures indistinguishable
+      // from each other. Prefer the server's wording when we have it.
       const timedOut = err instanceof DOMException && err.name === "AbortError";
+      const serverMessage =
+        !timedOut && err instanceof Error && err.message && !err.message.startsWith("Request failed (")
+          ? err.message
+          : null;
       setMessages((prev) => [
         ...prev,
         createMessage(
           "assistant",
           timedOut
             ? "Aiya, that took too long! Give it another go?"
-            : "Aiya, something went wrong on my end! Can you try sending that again?",
+            : (serverMessage ?? "Aiya, something went wrong on my end! Can you try sending that again?"),
         ),
       ]);
       setLastFailedContent(content);
@@ -321,6 +342,7 @@ export default function ChatPage() {
   }
 
   function skipToResults() {
+    trackEvent("skipped_to_results");
     const transcriptText = messages.map((m) => m.content).join("\n");
     const filters = inferFiltersFromTranscript(transcriptText);
     const partial = buildPartialProfile(profile, Object.keys(filters).length ? filters : undefined);
@@ -392,11 +414,25 @@ export default function ChatPage() {
         >
           ← Home
         </Link>
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-cordy-ink/60">
+        <span className="min-w-0 flex-1 truncate text-center text-xs font-semibold text-cordy-ink/60">
           {profileCount > 0
             ? `🔍 CORDY's spotted ${profileCount} thing${profileCount === 1 ? "" : "s"} about you so far`
             : ""}
         </span>
+        {/* Live narrowing counter — makes each answer's effect visible
+            ("47 programmes -> 12 -> 4") instead of leaving the user to infer
+            that anything is happening. */}
+        {candidates && (
+          <span
+            key={candidates.remaining}
+            className="animate-bounce-in shrink-0 rounded-full border-2 border-cordy-ink bg-white px-2.5 py-0.5 text-xs font-bold text-cordy-ink"
+            aria-live="polite"
+          >
+            {done
+              ? `${candidates.remaining} match${candidates.remaining === 1 ? "" : "es"} for you`
+              : `${candidates.remaining} of ${candidates.total} left`}
+          </span>
+        )}
         <button
           onClick={skipToResults}
           className="shrink-0 text-xs font-semibold text-cordy-ink/50 hover:text-cordy-ink"

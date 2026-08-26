@@ -257,6 +257,30 @@ export function scoreOpportunity(opp: Opportunity, filters: OpportunityFilters):
   return score;
 }
 
+/**
+ * What a plain category-listing browse would surface: everything in the
+ * category, in catalog order, with no personalisation at all. This is the
+ * honest control condition for the results-screen A/B — it's what the user
+ * would have got by clicking the category themselves.
+ */
+export function browseByCategory(category: string | undefined, limit = 4): Opportunity[] {
+  const pool = category ? CATALOG.filter((o) => o.category === category) : CATALOG;
+  return pool.slice(0, limit);
+}
+
+/** Total catalog size — the starting point for the "narrowing" counter in chat. */
+export const CATALOG_SIZE = CATALOG.length;
+
+/**
+ * How many catalog entries still plausibly match the filters known so far.
+ * Drives the live "47 -> 12 -> 4" narrowing counter during the conversation,
+ * which makes the value of each answer visible instead of implied.
+ */
+export function countMatches(filters: OpportunityFilters): number {
+  if (Object.keys(filters).length === 0) return CATALOG.length;
+  return CATALOG.filter((opp) => scoreOpportunity(opp, filters) > 0).length;
+}
+
 export function matchOpportunities(
   filters: OpportunityFilters,
   limit = 4,
@@ -315,21 +339,125 @@ export function buildRetrievalBlock(filters: OpportunityFilters): string {
 const MAX_POSSIBLE_SCORE = 4 + 3 * 2 + 1.5 + 1.5 + 1.5; // category + subTags(~3) + format + groupSize + skillLevel
 
 export function confidenceFromFilters(filters: OpportunityFilters): number {
-  const scores = CATALOG.map((opp) => scoreOpportunity(opp, filters)).sort((a, b) => b - a);
+  // Age-gated entries score -Infinity, which must be dropped before any
+  // arithmetic: leaving them in makes `top - runnerUp` infinite whenever only
+  // one entry clears the gate, which pinned confidence to a bogus 100%. It
+  // also makes the (a - b) comparator return NaN when two are compared.
+  const scores = CATALOG.map((opp) => scoreOpportunity(opp, filters))
+    .filter((s) => Number.isFinite(s))
+    .sort((a, b) => b - a);
   const top = scores[0] ?? 0;
   if (top <= 0) return 0;
 
-  const runnerUp = scores[1] ?? 0;
-  const coverage = Math.min(1, top / MAX_POSSIBLE_SCORE);
-  const separation = top > 0 ? Math.max(0, (top - runnerUp) / top) : 0;
+  // Two monotonic terms, deliberately NOT the old top-vs-runnerUp
+  // "separation". Separation fell whenever a newly-learned fact was shared by
+  // both leading candidates — it raised `top` without widening the gap — so
+  // answering another question could *lower* the number on screen. Confidence
+  // that drops as you tell CORDY more is perverse and reads as a bug.
+  //
+  // Both terms below only rise as the transcript grows: `strength` because
+  // scoring is purely additive per filter, `specificity` because the inferred
+  // filter set only accumulates. The one legitimate exception is the age hard
+  // gate, which can retire a previous best match — the client keeps a
+  // high-water mark so that never shows up as a visible regression.
+  const strength = Math.min(1, top / MAX_POSSIBLE_SCORE);
+  const specificity = filterSpecificity(filters);
 
-  return Math.round(Math.min(100, Math.max(0, (0.6 * coverage + 0.4 * separation) * 100)));
+  return Math.round(Math.min(100, Math.max(0, (0.55 * strength + 0.45 * specificity) * 100)));
+}
+
+/** Fraction of the catalog's discriminating dimensions we've actually pinned down. */
+function filterSpecificity(filters: OpportunityFilters): number {
+  const known = [
+    Boolean(filters.category),
+    Boolean(filters.subTags?.length),
+    Boolean(filters.format),
+    Boolean(filters.groupSize),
+    Boolean(filters.skillLevel),
+  ].filter(Boolean).length;
+  return known / 5;
 }
 
 // ── Explainable matches ───────────────────────────────────────────────────
 // Human-readable reasons a given opportunity matched the collected filters —
 // the same dimensions scoreOpportunity itself weighs — so a user (or a
 // parent) can see *why* something was recommended, not just that it was.
+
+// ── Discriminating-dimension analysis ────────────────────────────────────
+// Which single field would most usefully split the remaining candidates?
+// Used two ways: to decide whether another question is even worth asking
+// (if nothing discriminates, we're done — see shouldStopAsking), and to
+// drive a tap-only turn that needs no model call at all when the answer
+// space is small enough to render as buttons.
+
+/** The filter fields a question can realistically target, in rough order of how much they narrow. */
+export const DISCRIMINATING_DIMENSIONS = [
+  "category",
+  "format",
+  "groupSize",
+  "skillLevel",
+] as const;
+
+export type DiscriminatingDimension = (typeof DISCRIMINATING_DIMENSIONS)[number];
+
+export interface DimensionSplit {
+  dimension: DiscriminatingDimension;
+  /** Distinct values present among the remaining candidates, excluding "either"/"any" catch-alls. */
+  values: string[];
+}
+
+/** Values that mean "no preference" and so can't discriminate between candidates. */
+const CATCH_ALL_VALUES = new Set(["either", "any"]);
+
+/**
+ * The dimension the remaining candidates most disagree on, or null when they
+ * agree on everything (nothing left to usefully ask about).
+ *
+ * Prefers the fewest distinct values above one, so a turn resolves as much of
+ * the pool as possible and stays renderable as a small set of buttons.
+ */
+export function bestDiscriminator(
+  candidates: Opportunity[],
+  alreadyKnown: OpportunityFilters,
+): DimensionSplit | null {
+  let best: DimensionSplit | null = null;
+
+  for (const dimension of DISCRIMINATING_DIMENSIONS) {
+    // Don't re-ask something we already inferred.
+    if (alreadyKnown[dimension]) continue;
+
+    const values = [
+      ...new Set(
+        candidates
+          .map((c) => c[dimension])
+          .filter((v): v is string => typeof v === "string" && !CATCH_ALL_VALUES.has(v)),
+      ),
+    ];
+
+    if (values.length < 2) continue; // all agree — asking wouldn't narrow anything
+    if (!best || values.length < best.values.length) best = { dimension, values };
+  }
+
+  return best;
+}
+
+/**
+ * True once another question can't earn its place: either the candidates no
+ * longer disagree on anything we could ask about, or the pool is already
+ * small enough that further narrowing has nothing to act on.
+ *
+ * This is what lets the conversation end at its natural length instead of
+ * always running to MAX_QUESTIONS — a question that doesn't narrow anything
+ * is a question not worth a young person's patience.
+ */
+export function shouldStopAsking(
+  candidates: Opportunity[],
+  alreadyKnown: OpportunityFilters,
+  poolSize: number,
+): boolean {
+  if (poolSize <= 2) return true;
+  return bestDiscriminator(candidates, alreadyKnown) === null;
+}
 
 export function explainMatch(opp: Opportunity, filters: OpportunityFilters): string[] {
   const reasons: string[] = [];
