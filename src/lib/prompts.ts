@@ -1,3 +1,4 @@
+import { inferInterestsFromText } from "./interestSynonyms";
 import { CATALOG, CATEGORIES } from "./opportunities";
 import type { OpportunityFilters, ProfileData } from "./types";
 
@@ -182,11 +183,27 @@ export function inferFiltersFromTranscript(text: string): OpportunityFilters {
   const lower = text.toLowerCase();
   const filters: OpportunityFilters = {};
 
-  const category = CATEGORIES.find((c) => lower.includes(c.toLowerCase()));
+  // Two passes. The literal pass catches the catalog's own spelling ("Arts &
+  // Music", "music-production") — rare in real speech but unambiguous when it
+  // appears, so it wins. The synonym pass reads how young people actually
+  // talk ("singing", "footy", "sketching"), which the literal pass missed
+  // entirely: someone could say they sing three times and category would
+  // still come back unknown, driving a redundant question and depressing both
+  // the confidence score and match quality.
+  const literalCategory = CATEGORIES.find((c) => lower.includes(c.toLowerCase()));
+  const subTagPool = new Set(CATALOG.flatMap((o) => o.subTags ?? []));
+  const literalSubTags = [...subTagPool].filter((t) => lower.includes(t.replace(/-/g, " ")));
+
+  const inferred = inferInterestsFromText(text);
+
+  const category = literalCategory ?? inferred.category;
   if (category) filters.category = category;
 
-  const subTagPool = new Set(CATALOG.flatMap((o) => o.subTags ?? []));
-  const subTags = [...subTagPool].filter((t) => lower.includes(t.replace(/-/g, " ")));
+  // Only keep synonym-derived sub-tags that exist in the catalog — a tag
+  // nothing can match would drag the confidence maths around for nothing.
+  const subTags = [
+    ...new Set([...literalSubTags, ...inferred.subTags.filter((t) => subTagPool.has(t))]),
+  ];
   if (subTags.length) filters.subTags = subTags;
 
   if (/\bonline\b/.test(lower)) filters.format = "online";
