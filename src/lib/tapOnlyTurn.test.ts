@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG, bestDiscriminator, shouldStopAsking } from "./opportunities";
+import { CATALOG, TAP_ONLY_DIMENSIONS, bestDiscriminator, shouldStopAsking } from "./opportunities";
 import { buildTapOnlyTurn, labelForValue, valueForLabel } from "./tapOnlyTurn";
 
 describe("bestDiscriminator", () => {
@@ -82,6 +82,39 @@ describe("buildTapOnlyTurn", () => {
   it("round-trips labels back to the catalog values they came from", () => {
     for (const value of ["in-person", "online", "hybrid", "solo", "team", "beginner"]) {
       expect(valueForLabel(labelForValue(value))).toBe(value);
+    }
+  });
+});
+
+describe("category is never asked from a template", () => {
+  // Regression: a canned "Which of these is closest to what you're after?"
+  // fired immediately after the user had described their interests in their
+  // own words ("singing") and CORDY had replied "since you're into music".
+  // It read as a non-sequitur and asked something already answered.
+  it("returns null for a category split even when it looks tappable", () => {
+    expect(
+      buildTapOnlyTurn({ dimension: "category", values: ["Arts & Music", "Tech & Coding"] }, "sig"),
+    ).toBeNull();
+  });
+
+  it("excludes category from the tap-only dimension set", () => {
+    expect(TAP_ONLY_DIMENSIONS).not.toContain("category");
+  });
+
+  it("never proposes category when the tap-only set is used", () => {
+    const split = bestDiscriminator(CATALOG, {}, TAP_ONLY_DIMENSIONS);
+    expect(split?.dimension).not.toBe("category");
+  });
+
+  it("still opens on a connective so the turn reads as a continuation", () => {
+    for (const dim of TAP_ONLY_DIMENSIONS) {
+      const values =
+        dim === "format" ? ["in-person", "online"]
+        : dim === "groupSize" ? ["solo", "team"]
+        : ["beginner", "advanced"];
+      const turn = buildTapOnlyTurn({ dimension: dim, values }, "sig");
+      expect(turn, dim).not.toBeNull();
+      expect(turn!.message, dim).toMatch(/^(Got it|And|Nice|Cool)/);
     }
   });
 });

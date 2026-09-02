@@ -32,22 +32,25 @@ const VALUE_LABELS: Record<string, string> = {
 };
 
 /** Question templates per dimension. Several per dimension so repeats don't feel canned. */
-const TEMPLATES: Record<DimensionSplit["dimension"], string[]> = {
-  category: [
-    "Which of these is closest to what you're after?",
-    "Which of these pulls you in most?",
-  ],
+// Every template opens on a connective ("Got it —", "And", "Nice —") so the
+// turn reads as a continuation of what the user just said rather than a fresh
+// interrogation. A templated turn is inevitably a gear-change from CORDY's
+// written replies; the lead-in is what keeps it feeling like the same
+// conversation instead of a form that appeared mid-chat.
+//
+// `category` has no entry here on purpose — see TAP_ONLY_DIMENSIONS.
+const TEMPLATES: Partial<Record<DimensionSplit["dimension"], string[]>> = {
   format: [
-    "Would you rather do this in person or online?",
-    "How would you want to show up for this — in person, or from home?",
+    "Got it — and would you rather do this in person, or online from home?",
+    "Nice. Would you want to turn up somewhere for this, or do it online?",
   ],
   groupSize: [
-    "Do you prefer doing your own thing, or being part of a team?",
-    "Would you rather go solo on this, or with other people?",
+    "Got it — and is this more of a solo thing for you, or would you rather be part of a team?",
+    "Cool. Would you rather do this on your own, or with other people around?",
   ],
   skillLevel: [
-    "How much have you done of this before?",
-    "Where would you put yourself — just starting, or been at it a while?",
+    "And how much have you done of this before?",
+    "Got it — where would you put yourself: just starting out, or been at it a while?",
   ],
 };
 
@@ -72,7 +75,11 @@ export function labelForValue(value: string): string {
 export function buildTapOnlyTurn(split: DimensionSplit, poolSignature: string): TapOnlyTurn | null {
   if (split.values.length < 2 || split.values.length > 4) return null;
 
+  // No template (e.g. category) means this dimension isn't safe to templatize
+  // — fall back to the model rather than emitting something generic.
   const templates = TEMPLATES[split.dimension];
+  if (!templates?.length) return null;
+
   const message = templates[hash(split.dimension + poolSignature) % templates.length]!;
 
   return {
