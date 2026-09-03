@@ -216,8 +216,289 @@ export const CATALOG: Opportunity[] = [
     ageMin: 15,
     ageMax: 21,
   },
-];
+  // ── Sports & Outdoor ────────────────────────────────────────────────────
+  {
+    id: "opp-badminton-ladder",
+    title: "Youth Badminton Ladder",
+    description: "Weekly ranked singles matches — climb the ladder at your own pace.",
+    tags: ["sports", "badminton", "competitive"],
+    category: "Sports & Outdoor",
+    subTags: ["multi-sport", "individual-sport", "competitive"],
+    format: "in-person",
+    groupSize: "solo",
+    skillLevel: "intermediate",
+    ageMin: 13,
+    ageMax: 19,
+  },
+  {
+    id: "opp-dragon-boat",
+    title: "Dragon Boat Crew Recruitment",
+    description: "Train as a crew for regatta season — no experience needed, just commitment.",
+    tags: ["sports", "water", "team"],
+    category: "Sports & Outdoor",
+    subTags: ["endurance", "team", "multi-sport"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "beginner",
+    ageMin: 15,
+    ageMax: 21,
+  },
+  {
+    id: "opp-hiking-group",
+    title: "Weekend Hiking & Nature Group",
+    description: "Monthly trail walks around Singapore's parks and reservoirs, all paces welcome.",
+    tags: ["outdoor", "hiking", "social"],
+    category: "Sports & Outdoor",
+    subTags: ["multi-sport", "casual", "social"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "any",
+    ageMin: 12,
+    ageMax: 21,
+  },
+  {
+    id: "opp-swim-squad",
+    title: "Youth Swim Squad",
+    description: "Structured lane training twice a week, working toward timed meets.",
+    tags: ["sports", "swimming", "training"],
+    category: "Sports & Outdoor",
+    subTags: ["athletics", "endurance", "individual-sport"],
+    format: "in-person",
+    groupSize: "solo",
+    skillLevel: "intermediate",
+    ageMin: 12,
+    ageMax: 18,
+  },
 
+  // ── Arts & Music ────────────────────────────────────────────────────────
+  {
+    id: "opp-choir",
+    title: "Youth Choir & Vocal Ensemble",
+    description: "Weekly rehearsals building toward two public performances a year.",
+    tags: ["arts", "singing", "performance"],
+    category: "Arts & Music",
+    subTags: ["performance", "team"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "beginner",
+    ageMin: 12,
+    ageMax: 19,
+  },
+  {
+    id: "opp-film-collective",
+    title: "Youth Film & Video Collective",
+    description: "Shoot and edit a short film with a small crew over one school term.",
+    tags: ["arts", "film", "video"],
+    category: "Arts & Music",
+    subTags: ["design", "creative-tech", "team"],
+    format: "hybrid",
+    groupSize: "team",
+    skillLevel: "beginner",
+    ageMin: 14,
+    ageMax: 21,
+  },
+  {
+    id: "opp-photo-walk",
+    title: "Photography Walk Club",
+    description: "Monthly themed photo walks with informal critique afterwards.",
+    tags: ["arts", "photography", "casual"],
+    category: "Arts & Music",
+    subTags: ["design", "solo-craft", "casual"],
+    format: "in-person",
+    groupSize: "solo",
+    skillLevel: "any",
+    ageMin: 13,
+    ageMax: 21,
+  },
+  {
+    id: "opp-theatre-workshop",
+    title: "Theatre Production Workshop",
+    description: "Acting, staging and backstage roles, ending in a showcase night.",
+    tags: ["arts", "drama", "performance"],
+    category: "Arts & Music",
+    subTags: ["performance", "team-build"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "intermediate",
+    ageMin: 14,
+    ageMax: 21,
+  },
+  {
+    id: "opp-bedroom-producer",
+    title: "Bedroom Producer Collective",
+    description: "Online feedback circle for people making tracks at home.",
+    tags: ["arts", "music", "production"],
+    category: "Arts & Music",
+    subTags: ["music-production", "audio", "solo-craft"],
+    format: "online",
+    groupSize: "solo",
+    skillLevel: "intermediate",
+    ageMin: 15,
+    ageMax: 21,
+  },
+
+  // ── Tech & Coding ───────────────────────────────────────────────────────
+  {
+    id: "opp-python-intro",
+    title: "Intro to Python for Teens",
+    description: "Self-paced online course with weekly check-ins from a mentor.",
+    tags: ["tech", "coding", "beginner"],
+    category: "Tech & Coding",
+    subTags: ["coding", "independent-study"],
+    format: "online",
+    groupSize: "solo",
+    skillLevel: "beginner",
+    ageMin: 12,
+    ageMax: 17,
+  },
+  {
+    id: "opp-webdev-club",
+    title: "Web Dev Build Club",
+    description: "Build and ship a real website with a small team over six weeks.",
+    tags: ["tech", "coding", "web"],
+    category: "Tech & Coding",
+    subTags: ["coding", "creative-tech", "team-build"],
+    format: "hybrid",
+    groupSize: "team",
+    skillLevel: "beginner",
+    ageMin: 14,
+    ageMax: 21,
+  },
+  {
+    id: "opp-ctf-team",
+    title: "Cybersecurity CTF Team",
+    description: "Capture-the-flag practice and inter-school competitions.",
+    tags: ["tech", "security", "competitive"],
+    category: "Tech & Coding",
+    subTags: ["coding", "competitive", "team"],
+    format: "online",
+    groupSize: "team",
+    skillLevel: "advanced",
+    ageMin: 15,
+    ageMax: 21,
+  },
+  {
+    id: "opp-app-sprint",
+    title: "App Design Sprint",
+    description: "A weekend sprint from idea to clickable prototype, design and code together.",
+    tags: ["tech", "design", "app"],
+    category: "Tech & Coding",
+    subTags: ["coding", "design", "creative-tech"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "intermediate",
+    ageMin: 15,
+    ageMax: 21,
+  },
+
+  // ── Community & Volunteering ────────────────────────────────────────────
+  {
+    id: "opp-befriending",
+    title: "Befriending Seniors Programme",
+    description: "Paired with an elderly resident for regular visits and conversation.",
+    tags: ["community", "elderly", "volunteering"],
+    category: "Community & Volunteering",
+    subTags: ["volunteering", "one-on-one", "social-impact", "ongoing"],
+    format: "in-person",
+    groupSize: "solo",
+    skillLevel: "any",
+    ageMin: 14,
+    ageMax: 21,
+  },
+  {
+    id: "opp-coastal-cleanup",
+    title: "Coastal Cleanup Crew",
+    description: "Monthly beach and mangrove cleanups with data logging for researchers.",
+    tags: ["community", "environment", "volunteering"],
+    category: "Community & Volunteering",
+    subTags: ["volunteering", "social-impact", "casual"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "any",
+    ageMin: 12,
+    ageMax: 21,
+  },
+  {
+    id: "opp-food-rescue",
+    title: "Food Rescue & Redistribution",
+    description: "Collect surplus food from vendors and pack it for families, flexible shifts.",
+    tags: ["community", "volunteering", "social"],
+    category: "Community & Volunteering",
+    subTags: ["volunteering", "social-impact", "flexible-hours"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "any",
+    ageMin: 13,
+    ageMax: 21,
+  },
+  {
+    id: "opp-tutoring-corps",
+    title: "Youth Tutoring Corps",
+    description: "Weekly tutoring for primary school students who need extra support.",
+    tags: ["community", "tutoring", "mentoring"],
+    category: "Community & Volunteering",
+    subTags: ["mentoring", "one-on-one", "ongoing"],
+    format: "hybrid",
+    groupSize: "solo",
+    skillLevel: "intermediate",
+    ageMin: 15,
+    ageMax: 21,
+  },
+
+  // ── Academic & STEM ─────────────────────────────────────────────────────
+  {
+    id: "opp-math-olympiad",
+    title: "Math Olympiad Training",
+    description: "Weekly problem sets and coaching toward national olympiad rounds.",
+    tags: ["academic", "math", "competitive"],
+    category: "Academic & STEM",
+    subTags: ["research", "independent-study", "competitive"],
+    format: "hybrid",
+    groupSize: "solo",
+    skillLevel: "advanced",
+    ageMin: 13,
+    ageMax: 19,
+  },
+  {
+    id: "opp-env-field-study",
+    title: "Environmental Science Field Study",
+    description: "Collect and analyse real water-quality data across local catchments.",
+    tags: ["science", "environment", "research"],
+    category: "Academic & STEM",
+    subTags: ["research", "social-impact", "team-build"],
+    format: "in-person",
+    groupSize: "team",
+    skillLevel: "intermediate",
+    ageMin: 14,
+    ageMax: 19,
+  },
+  {
+    id: "opp-electronics-lab",
+    title: "Arduino & Electronics Lab",
+    description: "Drop-in sessions building small circuits and sensor projects.",
+    tags: ["science", "electronics", "diy"],
+    category: "Academic & STEM",
+    subTags: ["maker", "hardware", "engineering"],
+    format: "in-person",
+    groupSize: "solo",
+    skillLevel: "beginner",
+    ageMin: 12,
+    ageMax: 18,
+  },
+  {
+    id: "opp-social-enterprise",
+    title: "Social Enterprise Incubator",
+    description: "Turn a community problem into a working venture, with mentor support.",
+    tags: ["business", "social", "entrepreneurship"],
+    category: "Academic & STEM",
+    subTags: ["entrepreneurship", "pitching", "social-impact"],
+    format: "hybrid",
+    groupSize: "team",
+    skillLevel: "intermediate",
+    ageMin: 16,
+    ageMax: 21,
+  },
+];
 // ── Matching ─────────────────────────────────────────────────────────────
 // Weighted scoring across the real filter dimensions, not a flat tag string
 // overlap: category is the strongest signal, sub-tags next, then the
@@ -277,8 +558,45 @@ export const CATALOG_SIZE = CATALOG.length;
  * which makes the value of each answer visible instead of implied.
  */
 export function countMatches(filters: OpportunityFilters): number {
-  if (Object.keys(filters).length === 0) return CATALOG.length;
-  return CATALOG.filter((opp) => scoreOpportunity(opp, filters) > 0).length;
+  return CATALOG.filter((opp) => isCompatibleWith(opp, filters)).length;
+}
+
+/**
+ * Is this entry still viable given what we know — as opposed to how well it
+ * scores?
+ *
+ * The counter has to answer "how many are still in play", and that must only
+ * ever shrink as the conversation adds constraints. Using the match score for
+ * this was wrong: score is additive, so learning `groupSize: team` gave every
+ * team entry a positive score and pulled entries that previously scored zero
+ * back INTO the count — the on-screen counter jumped 8 -> 23 mid-conversation.
+ * An age-only filter had the opposite failure, scoring nothing positively and
+ * so matching zero entries.
+ *
+ * Compatibility instead only ever excludes, so the count is monotonically
+ * non-increasing. Sub-tags are deliberately not a constraint — they're
+ * additive interests, not requirements, and someone who mentions coding
+ * shouldn't stop being eligible for everything that isn't tagged coding.
+ */
+function isCompatibleWith(opp: Opportunity, filters: OpportunityFilters): boolean {
+  if (!ageRangesOverlap(opp, filters)) return false;
+  if (filters.category && opp.category && opp.category !== filters.category) return false;
+  if (filters.format && opp.format && opp.format !== filters.format) return false;
+
+  // "either"/"any" on either side means no conflict.
+  if (
+    filters.groupSize && opp.groupSize &&
+    filters.groupSize !== "either" && opp.groupSize !== "either" &&
+    opp.groupSize !== filters.groupSize
+  ) return false;
+
+  if (
+    filters.skillLevel && opp.skillLevel &&
+    filters.skillLevel !== "any" && opp.skillLevel !== "any" &&
+    opp.skillLevel !== filters.skillLevel
+  ) return false;
+
+  return true;
 }
 
 export function matchOpportunities(
