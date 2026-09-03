@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InterestTag } from "~/components/InterestTag";
 import { OpportunityCard } from "~/components/OpportunityCard";
 import { trackEvent } from "~/lib/analytics";
@@ -107,6 +107,26 @@ export default function ProfilePage() {
     trackEvent("rejected_tag", tag);
   }
 
+  // ── Sticky "what next" bar ────────────────────────────────────────────
+  // The two calls to action are the whole point of this screen, but the page
+  // is long (tags, matches, browse list, notify form) and they sit two thirds
+  // of the way down. Pin them to the bottom of the viewport whenever the real
+  // in-flow block isn't on screen, so they're reachable from any scroll
+  // position without ever being duplicated next to themselves.
+  const whatNextRef = useRef<HTMLDivElement | null>(null);
+  const [showStickyCta, setShowStickyCta] = useState(false);
+
+  useEffect(() => {
+    const el = whatNextRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => setShowStickyCta(!entries[entries.length - 1]?.isIntersecting),
+      { threshold: 0.15 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [profile]);
+
   function openRealCordy() {
     setComparedRealCordy(true);
     updateComparisonOutcome({ triedRealCordy: "yes" });
@@ -159,7 +179,7 @@ export default function ProfilePage() {
   const browseList = browseByCategory(profile.filters?.category, 4);
 
   return (
-    <div className="flex min-h-dvh flex-col items-center bg-cordy-cream px-4 py-8 sm:px-6 sm:py-12">
+    <div className="flex min-h-dvh flex-col items-center bg-cordy-cream px-4 pt-8 pb-32 sm:px-6 sm:pt-12 sm:pb-36">
 
       <div className="animate-bounce-in w-full max-w-[560px] rounded-[32px] border-4 border-cordy-ink bg-white p-6 text-center shadow-[0_30px_60px_rgba(22,33,62,0.22)] sm:rounded-[44px] sm:p-11">
         <div className="animate-mascot-bounce mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full border-4 border-cordy-red bg-[#ffd28f] sm:mb-5 sm:h-24 sm:w-24">
@@ -314,7 +334,7 @@ export default function ProfilePage() {
             recorded — the real-Cordy route sets triedRealCordy, which is what
             lets the survey's "better than browsing?" answer be segmented by
             whether they genuinely compared. */}
-        <div className="mt-8 border-t-2 border-cordy-cream pt-6">
+        <div ref={whatNextRef} className="mt-8 border-t-2 border-cordy-cream pt-6">
           <h2 className="font-heading text-base font-bold text-cordy-ink">What next?</h2>
           <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
             <button
@@ -411,6 +431,33 @@ export default function ProfilePage() {
             Start over
           </button>
         )}
+      </div>
+
+      {/* Pinned copy of the two calls to action. Rendered only while the real
+          block above is off screen, so someone reading the matches always has
+          both within thumb reach and never sees the pair twice at once. */}
+      <div
+        aria-hidden={!showStickyCta}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t-2 border-cordy-ink bg-cordy-cream/95 px-4 py-3 backdrop-blur transition-transform duration-200 ${
+          showStickyCta ? "translate-y-0" : "pointer-events-none translate-y-full"
+        }`}
+      >
+        <div className="mx-auto flex w-full max-w-[560px] gap-2.5">
+          <button
+            onClick={openRealCordy}
+            tabIndex={showStickyCta ? 0 : -1}
+            className="flex-1 rounded-2xl border-2 border-cordy-ink bg-white py-3 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+          >
+            {comparedRealCordy ? "✓ Real Cordy" : "Visit real Cordy ↗"}
+          </button>
+          <button
+            onClick={() => router.push("/survey")}
+            tabIndex={showStickyCta ? 0 : -1}
+            className="flex-1 rounded-2xl border-2 border-cordy-ink bg-cordy-teal py-3 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+          >
+            📝 Take a short survey
+          </button>
+        </div>
       </div>
     </div>
   );
