@@ -3,6 +3,7 @@ import type { OpportunityFilters } from "./types";
 import {
   CATALOG,
   confidenceFromFilters,
+  countMatches,
   estimatedRecentJoins,
   explainMatch,
   matchOpportunities,
@@ -168,5 +169,40 @@ describe("confidenceFromFilters monotonicity", () => {
     }
     // And it should actually move, not just sit flat.
     expect(series[series.length - 1]!).toBeGreaterThan(series[0]!);
+  });
+});
+
+describe("countMatches is a narrowing counter", () => {
+  // The on-screen counter ("N of M left") must only ever shrink as the
+  // conversation adds constraints. It previously counted anything with a
+  // positive match score, so learning groupSize pulled zero-scoring entries
+  // back INTO the count and the number visibly jumped 8 -> 23 mid-chat.
+  it("never increases as filters accumulate", () => {
+    const steps: OpportunityFilters[] = [
+      {},
+      { category: "Tech & Coding" },
+      { category: "Tech & Coding", subTags: ["coding"] },
+      { category: "Tech & Coding", subTags: ["coding"], groupSize: "team" },
+      { category: "Tech & Coding", subTags: ["coding"], groupSize: "team", format: "in-person" },
+    ];
+    const series = steps.map((f) => countMatches(f));
+    for (let i = 1; i < series.length; i++) {
+      expect(series[i], `step ${i} (${series[i - 1]} -> ${series[i]})`).toBeLessThanOrEqual(
+        series[i - 1]!,
+      );
+    }
+    expect(series[0]).toBe(CATALOG.length);
+    expect(series[series.length - 1]!).toBeLessThan(series[0]!);
+  });
+
+  it("counts age-compatible entries rather than positively-scoring ones", () => {
+    // An age-only filter contributes no positive score, so the old
+    // implementation returned 0 for every age range.
+    expect(countMatches({ ageMin: 13, ageMax: 18 })).toBeGreaterThan(0);
+  });
+
+  it("treats either/any as compatible with anything", () => {
+    const anySkill = countMatches({ skillLevel: "any" });
+    expect(anySkill).toBe(CATALOG.length);
   });
 });
