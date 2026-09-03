@@ -12,7 +12,14 @@ import { browseByCategory, explainMatch, matchOpportunities } from "~/lib/opport
 import { clearComparisonOutcome, updateComparisonOutcome } from "~/lib/studyContext";
 import type { Opportunity, OpportunityFilters, ProfileData } from "~/lib/types";
 
-const RESUME_KEYS = ["cordy_chat_transcript", "cordy_questions_asked", "cordy_max_override"];
+// Includes the current consolidated key plus the legacy ones, so "Start over"
+// clears a resumable conversation however it was saved.
+const RESUME_KEYS = [
+  "cordy_chat_resume",
+  "cordy_chat_transcript",
+  "cordy_questions_asked",
+  "cordy_max_override",
+];
 const NOTIFY_STORAGE_KEY = "cordy_notify_signups";
 const REAL_CORDY_URL = "https://cordy.sg";
 

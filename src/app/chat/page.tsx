@@ -15,9 +15,24 @@ import type { ChatResponse, Message, OpenerResponse } from "~/lib/types";
 
 type MouthAnim = "chomp" | "celebrate" | null;
 
+// Legacy keys — still cleared on mount so anyone carrying stale values from a
+// previous deploy doesn't get resumed into a conversation from days ago.
 const TRANSCRIPT_KEY = "cordy_chat_transcript";
 const QUESTIONS_ASKED_KEY = "cordy_questions_asked";
 const MAX_OVERRIDE_KEY = "cordy_max_override";
+
+const RESUME_KEY = "cordy_chat_resume";
+
+/**
+ * How long a saved conversation stays resumable.
+ *
+ * Resuming exists so an accidental refresh or a dropped connection doesn't
+ * lose someone's progress — that's a matter of seconds or minutes. Without an
+ * expiry the saved state lived forever, so *any* later visit to /chat silently
+ * reopened an old thread instead of starting fresh, which is confusing and
+ * gives no way back to a clean run.
+ */
+const RESUME_TTL_MS = 30 * 60 * 1000;
 
 function createMessage(role: Message["role"], content: string): Message {
   return { id: crypto.randomUUID(), role, content };
@@ -58,24 +73,67 @@ function readMcqCategories(): string[] {
   }
 }
 
+/** Why the conversation was saved — decides how resuming should feel. */
+type ResumeReason =
+  /** Autosaved each turn, so an accidental refresh doesn't lose progress. */
+  | "autosave"
+  /** Deliberate hand-off from the results screen's "keep chatting". */
+  | "handoff";
+
+interface StoredResume {
+  savedAt: number;
+  reason: ResumeReason;
+  messages: { role: Message["role"]; content: string }[];
+  questionsAsked: number;
+  effectiveMax: number;
+  tags: string[];
+  confidence: number;
+}
+
 interface ResumeState {
   messages: Message[];
   questionsAsked: number;
   effectiveMax: number;
+  tags: string[];
+  confidence: number;
+  reason: ResumeReason;
+}
+
+function clearResumeState(): void {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+    localStorage.removeItem(TRANSCRIPT_KEY);
+    localStorage.removeItem(QUESTIONS_ASKED_KEY);
+    localStorage.removeItem(MAX_OVERRIDE_KEY);
+  } catch {
+    // storage unavailable — nothing to clear
+  }
 }
 
 function readResumeState(): ResumeState | null {
   try {
-    const rawTranscript = localStorage.getItem(TRANSCRIPT_KEY);
-    const rawQuestionsAsked = localStorage.getItem(QUESTIONS_ASKED_KEY);
-    const rawMaxOverride = localStorage.getItem(MAX_OVERRIDE_KEY);
-    if (!rawTranscript || !rawMaxOverride) return null;
+    const raw = localStorage.getItem(RESUME_KEY);
+    if (!raw) return null;
 
-    const stored = JSON.parse(rawTranscript) as { role: Message["role"]; content: string }[];
+    const stored = JSON.parse(raw) as Partial<StoredResume>;
+    if (!Array.isArray(stored.messages) || stored.messages.length === 0) return null;
+
+    // Anything older than the TTL is a different sitting, not a refresh.
+    if (typeof stored.savedAt !== "number" || Date.now() - stored.savedAt > RESUME_TTL_MS) {
+      clearResumeState();
+      return null;
+    }
+
     return {
-      messages: stored.map((m) => createMessage(m.role, m.content)),
-      questionsAsked: rawQuestionsAsked ? parseInt(rawQuestionsAsked, 10) : MAX_QUESTIONS,
-      effectiveMax: parseInt(rawMaxOverride, 10),
+      messages: stored.messages.map((m) => createMessage(m.role, m.content)),
+      questionsAsked: stored.questionsAsked ?? MAX_QUESTIONS,
+      effectiveMax: stored.effectiveMax ?? MAX_QUESTIONS,
+      // Restored so the resumed screen is coherent. Without these the
+      // transcript came back but the tag chips vanished and the progress bar
+      // snapped to 0%, which read as a half-broken conversation.
+      tags: Array.isArray(stored.tags) ? stored.tags : [],
+      confidence: typeof stored.confidence === "number" ? stored.confidence : 0,
+      reason: stored.reason === "handoff" ? "handoff" : "autosave",
     };
   } catch {
     return null;
@@ -95,10 +153,10 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(!resumeState); // typing indicator while the opener loads
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [profile, setProfile] = useState<string[]>([]); // running interest tags, for "spotted N things"
+  const [profile, setProfile] = useState<string[]>(resumeState?.tags ?? []); // running interest tags
   const [questionsAsked, setQuestionsAsked] = useState(resumeState?.questionsAsked ?? 0);
   const [effectiveMax] = useState(resumeState?.effectiveMax ?? MAX_QUESTIONS);
-  const [confidence, setConfidence] = useState(0);
+  const [confidence, setConfidence] = useState(resumeState?.confidence ?? 0);
   const [candidates, setCandidates] = useState<{ remaining: number; total: number } | null>(null);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const [done, setDone] = useState(false);
@@ -125,18 +183,21 @@ export default function ChatPage() {
     // rather than inside the useState initializer, which double-invokes in
     // dev and would wipe the keys before the second render could read them.
     localStorage.removeItem(MCQ_CATEGORIES_STORAGE_KEY);
-    localStorage.removeItem(TRANSCRIPT_KEY);
-    localStorage.removeItem(QUESTIONS_ASKED_KEY);
-    localStorage.removeItem(MAX_OVERRIDE_KEY);
+    clearResumeState();
     trackEvent("started_chat");
-    if (resumeState) {
+    if (resumeState?.reason === "handoff") {
+      // Came from "keep chatting" on the results screen — a deliberate
+      // continuation, so opening a new thread of the conversation is right.
       setMessages((prev) => [
         ...prev,
         createMessage("assistant", "Let's dig a bit deeper — tell me more about what you're into!"),
       ]);
-    } else {
+    } else if (!resumeState) {
       void loadOpener();
     }
+    // An autosave resume (refresh / dropped connection) restores silently —
+    // adding a "let's dig deeper" line there is a non-sequitur, since from the
+    // user's point of view nothing happened except the page reloading.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -181,7 +242,7 @@ export default function ChatPage() {
   // not only when the user explicitly navigates away via skip/see-profile.
   useEffect(() => {
     if (messages.length === 0 || done) return;
-    persistTranscriptForResume(effectiveMax, messages, questionsAsked);
+    persistTranscriptForResume(effectiveMax, messages, questionsAsked, "autosave");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, questionsAsked, done]);
 
@@ -332,13 +393,42 @@ export default function ChatPage() {
     setQuestionsAsked(Math.max(1, truncated.filter((m) => m.role === "assistant").length));
   }
 
-  function persistTranscriptForResume(nextMax: number, transcript: Message[], askedCount: number) {
-    localStorage.setItem(
-      TRANSCRIPT_KEY,
-      JSON.stringify(transcript.map(({ role, content }) => ({ role, content }))),
-    );
-    localStorage.setItem(QUESTIONS_ASKED_KEY, String(askedCount));
-    localStorage.setItem(MAX_OVERRIDE_KEY, String(nextMax));
+  function persistTranscriptForResume(
+    nextMax: number,
+    transcript: Message[],
+    askedCount: number,
+    reason: ResumeReason,
+  ) {
+    try {
+      localStorage.setItem(
+        RESUME_KEY,
+        JSON.stringify({
+          savedAt: Date.now(),
+          reason,
+          messages: transcript.map(({ role, content }) => ({ role, content })),
+          questionsAsked: askedCount,
+          effectiveMax: nextMax,
+          tags: profile,
+          confidence,
+        }),
+      );
+    } catch {
+      // storage full or unavailable — resuming is a convenience, not a
+      // requirement, so never let it break the conversation
+    }
+  }
+
+  /**
+   * Abandon a resumed conversation and begin again.
+   *
+   * Resuming used to be a one-way door: the saved state was reopened silently
+   * and there was no control anywhere on this screen to get back to a clean
+   * run. Deliberately does not touch cordy_profile — a previously completed
+   * profile is still theirs until a new run replaces it.
+   */
+  function startFresh() {
+    clearResumeState();
+    router.push("/intro");
   }
 
   function skipToResults() {
@@ -348,7 +438,7 @@ export default function ChatPage() {
     const partial = buildPartialProfile(profile, Object.keys(filters).length ? filters : undefined);
     localStorage.setItem("cordy_profile", JSON.stringify(partial));
     // Let "keep chatting" from the results screen pick up exactly where this left off.
-    persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked);
+    persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked, "handoff");
     router.push("/profile");
   }
 
@@ -356,7 +446,7 @@ export default function ChatPage() {
     if (!pendingProfile) return;
     triggerMouthAnim("celebrate", 500, () => {
       localStorage.setItem("cordy_profile", JSON.stringify(pendingProfile));
-      persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked);
+      persistTranscriptForResume(effectiveMax + 3, messages, questionsAsked, "handoff");
       router.push("/profile");
     });
   }
@@ -402,6 +492,9 @@ export default function ChatPage() {
   // instead of sitting frozen and jumping, and eases smoothly toward the
   // real value once one lands.
   const progressPct = Math.round(Math.max(0, Math.min(100, displayedProgress)));
+  // Only the silent (refresh / dropped-connection) resume needs announcing —
+  // a "keep chatting" hand-off from the results screen is already deliberate.
+  const resumedSilently = resumeState?.reason === "autosave";
   const profileCount = profile.length;
 
   return (
@@ -440,6 +533,23 @@ export default function ChatPage() {
           Skip for now →
         </button>
       </div>
+
+      {/* Picked up mid-conversation after a refresh or dropped connection.
+          Says so plainly and offers a way out — resuming silently, with no
+          indication and no escape hatch, is what made this confusing. */}
+      {resumedSilently && (
+        <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-cordy-ink/15 bg-white/70 px-3 py-2">
+          <span className="text-xs font-semibold text-cordy-ink/70">
+            ↩️ Picked up where you left off
+          </span>
+          <button
+            onClick={startFresh}
+            className="shrink-0 rounded-full border-2 border-cordy-ink bg-white px-3 py-1 text-xs font-bold text-cordy-ink shadow-[2px_2px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+          >
+            Start fresh
+          </button>
+        </div>
+      )}
 
       {/* Live tag reveal — each new interest pops in as CORDY spots it */}
       {profileCount > 0 && (
