@@ -10,6 +10,7 @@ import {
   countMatches,
   matchOpportunities,
   shouldStopAsking,
+  TAP_ONLY_DIMENSIONS,
 } from "~/lib/opportunities";
 import {
   buildProfileFromReply,
@@ -140,7 +141,10 @@ export async function POST(request: Request): Promise<NextResponse<ChatResponse>
   // forcedContinue covers those, so a tap turn can only ever land once the
   // conversation has already earned some rapport.
   if (!forcedFinal && !forcedContinue) {
-    const split = bestDiscriminator(candidates, inferredFilters);
+    // TAP_ONLY_DIMENSIONS excludes category — asking that from a template
+    // reads as a non-sequitur right after the user has described their
+    // interests in their own words. The model handles that one.
+    const split = bestDiscriminator(candidates, inferredFilters, TAP_ONLY_DIMENSIONS);
     const tapTurn = split
       ? buildTapOnlyTurn(split, candidates.map((c) => c.id).join(","))
       : null;

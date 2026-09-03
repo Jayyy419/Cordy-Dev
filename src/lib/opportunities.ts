@@ -400,6 +400,18 @@ export const DISCRIMINATING_DIMENSIONS = [
 
 export type DiscriminatingDimension = (typeof DISCRIMINATING_DIMENSIONS)[number];
 
+/**
+ * The subset a templated, model-free turn may ask about.
+ *
+ * `category` is deliberately excluded. It's the most conversationally loaded
+ * field — the MCQ already covers it and the opener establishes it — so a
+ * canned "which of these is closest?" lands as a non-sequitur right after the
+ * user has told CORDY, in their own words, what they're into. These three are
+ * genuinely mechanical preferences where a button press is the natural shape
+ * of the answer anyway; category never is.
+ */
+export const TAP_ONLY_DIMENSIONS = ["format", "groupSize", "skillLevel"] as const;
+
 export interface DimensionSplit {
   dimension: DiscriminatingDimension;
   /** Distinct values present among the remaining candidates, excluding "either"/"any" catch-alls. */
@@ -419,10 +431,11 @@ const CATCH_ALL_VALUES = new Set(["either", "any"]);
 export function bestDiscriminator(
   candidates: Opportunity[],
   alreadyKnown: OpportunityFilters,
+  dimensions: readonly DiscriminatingDimension[] = DISCRIMINATING_DIMENSIONS,
 ): DimensionSplit | null {
   let best: DimensionSplit | null = null;
 
-  for (const dimension of DISCRIMINATING_DIMENSIONS) {
+  for (const dimension of dimensions) {
     // Don't re-ask something we already inferred.
     if (alreadyKnown[dimension]) continue;
 
