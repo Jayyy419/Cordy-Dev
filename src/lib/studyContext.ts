@@ -10,7 +10,35 @@
 // already observed.
 
 const COMPARISON_KEY = "cordy_comparison_outcome";
+const RESUME_KEY = "cordy_chat_resume";
+/** Legacy standalone transcript key, still read as a fallback. */
 const TRANSCRIPT_KEY = "cordy_chat_transcript";
+
+interface StoredMessage {
+  role: string;
+  content: string;
+}
+
+/** Messages from the current resume blob, or the legacy key if that's all there is. */
+function readStoredMessages(): StoredMessage[] {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY);
+    if (raw) {
+      const blob = JSON.parse(raw) as { messages?: StoredMessage[] };
+      if (Array.isArray(blob.messages) && blob.messages.length) return blob.messages;
+    }
+  } catch {
+    // fall through to the legacy key
+  }
+  try {
+    const legacy = localStorage.getItem(TRANSCRIPT_KEY);
+    if (!legacy) return [];
+    const parsed = JSON.parse(legacy) as StoredMessage[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 /** How many characters of transcript we're willing to ship to Airtable. */
 const MAX_TRANSCRIPT_CHARS = 6000;
@@ -69,10 +97,13 @@ export function clearComparisonOutcome(): void {
  */
 export function readTranscriptForSubmission(): string {
   try {
-    const raw = localStorage.getItem(TRANSCRIPT_KEY);
-    if (!raw) return "";
-    const stored = JSON.parse(raw) as { role: string; content: string }[];
-    if (!Array.isArray(stored)) return "";
+    // The chat page now stores the conversation inside a single resume blob
+    // (with a timestamp, so it can expire). Read that first, falling back to
+    // the standalone legacy key for anyone mid-session across the change —
+    // silently shipping empty transcripts would gut the richest signal the
+    // survey collects.
+    const stored = readStoredMessages();
+    if (!stored.length) return "";
     const text = stored
       .map((m) => `${m.role === "user" ? "THEM" : "CORDY"}: ${m.content}`)
       .join("\n");
