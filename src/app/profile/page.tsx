@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { InterestTag } from "~/components/InterestTag";
 import { OpportunityCard } from "~/components/OpportunityCard";
+import { PrototypeNotice } from "~/components/PrototypeNotice";
 import { trackEvent } from "~/lib/analytics";
 import { copyToClipboard } from "~/lib/clipboard";
 import { browseByCategory, explainMatch, matchOpportunities } from "~/lib/opportunities";
@@ -244,9 +245,7 @@ export default function ProfilePage() {
         {hasMatches && (
           <div id="matched-opportunities" className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
             <h2 className="font-heading text-base font-bold text-cordy-ink">Matched for you</h2>
-            <p className="mt-1 mb-3.5 text-xs text-cordy-ink/60">
-              Sample matches from CORDY&apos;s opportunities list, based on what you shared.
-            </p>
+            <PrototypeNotice variant="compact" />
             <div className="flex flex-col gap-3">
               {shownMatches.map((opp) => (
                 <OpportunityCard
