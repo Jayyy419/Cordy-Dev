@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PrototypeNotice } from "~/components/PrototypeNotice";
 import { trackEvent } from "~/lib/analytics";
 import type { ProfileData } from "~/lib/types";
 
@@ -93,6 +94,10 @@ export default function HomePage() {
             Start chatting with CORDY →
           </Link>
         )}
+
+        {/* Framed up front, before anyone invests a few minutes chatting on
+            the assumption these are real programmes. */}
+        <PrototypeNotice />
       </main>
     </div>
   );

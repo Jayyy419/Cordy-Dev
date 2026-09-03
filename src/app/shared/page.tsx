@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 import { InterestTag } from "~/components/InterestTag";
 import { OpportunityCard } from "~/components/OpportunityCard";
+import { PrototypeNotice } from "~/components/PrototypeNotice";
 import { LIMITS } from "~/lib/apiLimits";
 import { explainMatch } from "~/lib/opportunities";
 import type { ProfileData } from "~/lib/types";
@@ -81,6 +82,7 @@ function SharedProfileView() {
         {profile.opportunities.length > 0 && (
           <div className="mt-7 border-t-2 border-cordy-cream pt-6 text-left">
             <h2 className="font-heading text-base font-bold text-cordy-ink">Matched opportunities</h2>
+            <PrototypeNotice variant="compact" />
             <div className="mt-3.5 flex flex-col gap-3">
               {profile.opportunities.map((opp) => (
                 <OpportunityCard
