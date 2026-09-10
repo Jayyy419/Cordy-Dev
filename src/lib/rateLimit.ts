@@ -17,6 +17,24 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>();
 
+// Hard ceiling on tracked buckets. pruneStale only evicts EXPIRED windows, so
+// without this a flood of distinct keys inside a single window grows the Map
+// without bound. Map preserves insertion order, so dropping from the front
+// evicts the oldest keys first.
+const MAX_BUCKETS = 20_000;
+
+function evictOldest(target: number): void {
+  for (const key of buckets.keys()) {
+    if (buckets.size <= target) return;
+    buckets.delete(key);
+  }
+}
+
+/** Test-only view of the tracked bucket count. */
+export function bucketCountForTest(): number {
+  return buckets.size;
+}
+
 // Opportunistic cleanup so the Map doesn't grow unbounded between cold
 // starts on a long-lived instance. Prunes each bucket against ITS OWN
 // window, not the caller's — different routes use different windows, so
@@ -40,6 +58,10 @@ export function checkRateLimit(
 ): RateLimitResult {
   const now = Date.now();
   if (buckets.size > 5000) pruneStale(now);
+  // Pruning can free nothing when every window is still live, so enforce the
+  // ceiling directly. Evicting a live bucket resets that key's counter, which
+  // is why the ceiling is far above any plausible legitimate concurrency.
+  if (buckets.size >= MAX_BUCKETS) evictOldest(Math.floor(MAX_BUCKETS * 0.9));
 
   const existing = buckets.get(key);
   if (!existing || now - existing.windowStart > windowMs) {
