@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkCombinedRateLimit, checkRateLimit, clientIpFrom } from "./rateLimit";
+import { bucketCountForTest, checkCombinedRateLimit, checkRateLimit, clientIpFrom } from "./rateLimit";
 
 describe("checkRateLimit", () => {
   it("allows requests under the limit", () => {
@@ -91,5 +91,18 @@ describe("clientIpFrom", () => {
   it("falls back to 'unknown' when neither header is present", () => {
     const request = new Request("http://localhost/");
     expect(clientIpFrom(request)).toBe("unknown");
+  });
+});
+
+describe("bucket map growth", () => {
+  // pruneStale only removes buckets whose OWN window has expired, so a flood
+  // of distinct keys inside one window used to grow the Map without bound —
+  // an attacker rotating a header could exhaust the instance's memory. There
+  // has to be a hard ceiling that evicts even live buckets.
+  it("does not grow without bound when flooded with distinct keys", () => {
+    for (let i = 0; i < 25_000; i++) {
+      checkRateLimit(`flood:${i}`, 5, 60_000);
+    }
+    expect(bucketCountForTest()).toBeLessThanOrEqual(20_000);
   });
 });

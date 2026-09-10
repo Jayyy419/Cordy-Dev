@@ -1,0 +1,5 @@
+# This is a prototype that mirrors cordy.sg's branding without being it, and
+# /shared carries a young person's interest profile in the query string.
+# Neither belongs in a search index.
+User-agent: *
+Disallow: /
