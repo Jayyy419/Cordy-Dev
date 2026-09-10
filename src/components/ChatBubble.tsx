@@ -23,11 +23,12 @@ export function ChatBubble({ message, showAvatar = true, onEdit }: ChatBubblePro
       <div
         onClick={onEdit}
         title={editable ? "Click to edit this answer" : undefined}
+        role={message.isError ? "alert" : undefined}
         className={`animate-bounce-in group relative flex max-w-[88%] items-center gap-1.5 rounded-2xl border-2 border-cordy-ink px-3.5 py-2.5 text-sm leading-relaxed shadow-[3px_3px_0_0_var(--color-cordy-ink)] sm:max-w-[75%] sm:px-4 sm:py-3 ${
           isUser
             ? "rounded-br-sm bg-cordy-teal text-cordy-ink"
             : "rounded-bl-sm bg-white text-cordy-ink"
-        } ${editable ? "cursor-pointer transition-opacity hover:opacity-80" : ""}`}
+        } ${message.isError ? "border-cordy-red bg-[#fff4f4] text-cordy-ink" : ""} ${editable ? "cursor-pointer transition-opacity hover:opacity-80" : ""}`}
       >
         <span>{message.content}</span>
         {editable && (

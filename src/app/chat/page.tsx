@@ -8,6 +8,7 @@ import { InterestTag } from "~/components/InterestTag";
 import { QuickReplies } from "~/components/QuickReplies";
 import { TypingIndicator } from "~/components/TypingIndicator";
 import { trackEvent } from "~/lib/analytics";
+import { ChatError, chatErrorMessage, withoutErrorMessages } from "~/lib/chatErrors";
 import { buildPartialProfile, getOrCreateProfileId, persistBackendProfile } from "~/lib/backendProfileSim";
 import { MCQ_CATEGORIES_STORAGE_KEY } from "~/lib/mcq";
 import { inferFiltersFromTranscript, MAX_QUESTIONS } from "~/lib/prompts";
@@ -34,8 +35,8 @@ const RESUME_KEY = "cordy_chat_resume";
  */
 const RESUME_TTL_MS = 30 * 60 * 1000;
 
-function createMessage(role: Message["role"], content: string): Message {
-  return { id: crypto.randomUUID(), role, content };
+function createMessage(role: Message["role"], content: string, isError = false): Message {
+  return { id: crypto.randomUUID(), role, content, ...(isError ? { isError: true } : {}) };
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -43,24 +44,40 @@ const FETCH_TIMEOUT_MS = 20_000;
 async function fetchJson<T>(url: string, body: unknown): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const data = (await res.json()) as T & { message?: string };
-    if (!res.ok) {
-      // Rate-limit (429) and API-error (502) responses both carry a
-      // user-facing `message` already — surface that instead of a generic
-      // "API error 502".
-      throw new Error(data.message ?? `Request failed (${res.status})`);
-    }
-    return data;
+  } catch (err) {
+    // Distinguish "we gave up waiting" from "the request never landed", and
+    // classify here so no raw browser string ("Failed to fetch", "Load
+    // failed") can escape into CORDY's dialogue.
+    throw new ChatError(
+      err instanceof DOMException && err.name === "AbortError" ? "timeout" : "network",
+    );
   } finally {
     clearTimeout(timeout);
   }
+
+  // A non-JSON body (an edge/proxy error page, say) is still a server failure.
+  let data: (T & { message?: string }) | null = null;
+  try {
+    data = (await res.json()) as T & { message?: string };
+  } catch {
+    if (res.ok) throw new ChatError("server");
+  }
+
+  if (!res.ok) {
+    // Rate-limit (429) and API-error (502) responses both carry a
+    // user-facing `message` already — surface that instead of a generic
+    // "API error 502".
+    throw new ChatError("server", data?.message ?? null);
+  }
+  return data as T;
 }
 
 function readMcqCategories(): string[] {
@@ -296,9 +313,15 @@ export default function ChatPage() {
 
     // A retry resends the transcript as-is — the failed user message is
     // already in `messages` from the first attempt, so don't append it
-    // again (that would show the same user bubble twice).
-    const history = isRetry ? messages : [...messages, createMessage("user", content)];
-    if (!isRetry) setMessages(history);
+    // again (that would show the same user bubble twice). Strip the failure
+    // notices first: they're UI, not conversation, and sending them back
+    // made CORDY reason about its own "something went wrong" line.
+    const history = isRetry
+      ? withoutErrorMessages(messages)
+      : [...withoutErrorMessages(messages), createMessage("user", content)];
+    // Clear the visible error bubbles as the retry starts, so a second
+    // failure doesn't stack a growing pile of them down the thread.
+    setMessages(history);
     setInput("");
     setBusy(true);
     setSuggestions([]);
@@ -343,28 +366,15 @@ export default function ChatPage() {
       });
     } catch (err) {
       console.error(err);
-      // Every route already returns a friendly, situation-specific `message`
-      // (rate limited vs. upstream failure vs. bad request) and fetchJson
-      // rethrows it. Showing a single generic line instead threw all that
-      // away — "try again" is actively wrong advice when the real answer is
-      // "wait a minute", and it made production failures indistinguishable
-      // from each other. Prefer the server's wording when we have it.
-      const timedOut = err instanceof DOMException && err.name === "AbortError";
-      const serverMessage =
-        !timedOut && err instanceof Error && err.message && !err.message.startsWith("Request failed (")
-          ? err.message
-          : null;
-      setMessages((prev) => [
-        ...prev,
-        createMessage(
-          "assistant",
-          timedOut
-            ? "Aiya, that took too long! Give it another go?"
-            : (serverMessage ?? "Aiya, something went wrong on my end! Can you try sending that again?"),
-        ),
-      ]);
+      // Every route returns a friendly, situation-specific `message` (rate
+      // limited vs. upstream failure), and chatErrorMessage prefers it —
+      // "try again" is actively wrong advice when the real answer is "wait a
+      // minute". Anything that isn't one of ours (a dropped connection, a
+      // timeout) gets our own wording, so a raw browser string can never be
+      // spoken by CORDY.
+      setMessages((prev) => [...prev, createMessage("assistant", chatErrorMessage(err), true)]);
       setLastFailedContent(content);
-      setSuggestions(["Retry"]);
+      setSuggestions([]);
     }
 
     setBusy(false);
@@ -372,10 +382,6 @@ export default function ChatPage() {
   }
 
   function handleSuggestionSelect(reply: string) {
-    if (reply === "Retry" && lastFailedContent) {
-      void sendMessage(lastFailedContent, true);
-      return;
-    }
     void sendMessage(reply);
   }
 
@@ -405,7 +411,10 @@ export default function ChatPage() {
         JSON.stringify({
           savedAt: Date.now(),
           reason,
-          messages: transcript.map(({ role, content }) => ({ role, content })),
+          // Error notices are UI, not conversation — keeping them out here
+          // stops them landing in the transcript the survey ships to
+          // Airtable, and stops a resumed thread replaying them to the model.
+          messages: withoutErrorMessages(transcript).map(({ role, content }) => ({ role, content })),
           questionsAsked: askedCount,
           effectiveMax: nextMax,
           tags: profile,
@@ -649,8 +658,30 @@ export default function ChatPage() {
             {busy && <TypingIndicator showAvatar={false} />}
           </div>
 
+          {/* Retry, when the last turn failed. A dedicated button rather than a
+              "Retry" quick-reply chip: the chips are things you might SAY to
+              CORDY, so putting a recovery control among them read as another
+              conversational option and was easy to miss at the moment it
+              mattered most. Sits directly under the failure notice. */}
+          {!busy && lastFailedContent !== null && (
+            <div className="flex flex-shrink-0 justify-center gap-2 px-3 pb-2 sm:px-4">
+              <button
+                onClick={() => void sendMessage(lastFailedContent, true)}
+                className="rounded-2xl border-2 border-cordy-ink bg-cordy-red px-5 py-2 font-heading text-sm font-bold text-white shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+              >
+                ↻ Try again
+              </button>
+              <button
+                onClick={skipToResults}
+                className="rounded-2xl border-2 border-cordy-ink bg-white px-4 py-2 font-heading text-sm font-bold text-cordy-ink shadow-[3px_3px_0_0_var(--color-cordy-ink)] transition-transform hover:-translate-y-0.5"
+              >
+                See what I have
+              </button>
+            </div>
+          )}
+
           {/* suggestions */}
-          {!busy && !done && suggestions.length > 0 && (
+          {!busy && !done && lastFailedContent === null && suggestions.length > 0 && (
             <QuickReplies replies={suggestions} onSelect={handleSuggestionSelect} disabled={busy} />
           )}
 
