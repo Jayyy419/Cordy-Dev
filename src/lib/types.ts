@@ -4,6 +4,13 @@ export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /**
+   * True for a locally-generated failure notice ("I can't reach the
+   * internet…"). It's shown in the thread but is NOT part of the
+   * conversation: it must never be sent back to the model as an assistant
+   * turn, nor saved into the transcript the survey collects.
+   */
+  isError?: boolean;
 }
 
 // ── Profile ───────────────────────────────────────────────────────────────────
